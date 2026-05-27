@@ -136,35 +136,32 @@ class HttpServer private constructor(private val address: InetSocketAddress) {
         contexts[path] = handler
     }
 
+    @Throws(Exception::class)
     fun start() {
         if (running) return
+        val ss = ServerSocket()
+        ss.reuseAddress = true
+        ss.bind(address)
+        serverSocket = ss
         running = true
-        try {
-            val ss = ServerSocket()
-            ss.reuseAddress = true
-            ss.bind(address)
-            serverSocket = ss
-            Log.i("HttpServerShim", "Android HttpServer started successfully on port ${address.port}")
+        Log.i("HttpServerShim", "Android HttpServer started successfully on port ${address.port}")
 
-            Thread {
-                while (running) {
-                    try {
-                        val clientSocket = ss.accept()
-                        // Ensure timeout is configured for idle socket connections
-                        clientSocket.soTimeout = 15000
-                        executor.execute {
-                            handleClient(clientSocket)
-                        }
-                    } catch (e: Exception) {
-                        if (running) {
-                            Log.e("HttpServerShim", "Accept socket loop error", e)
-                        }
+        Thread {
+            while (running) {
+                try {
+                    val clientSocket = ss.accept()
+                    // Ensure timeout is configured for idle socket connections
+                    clientSocket.soTimeout = 15000
+                    executor.execute {
+                        handleClient(clientSocket)
+                    }
+                } catch (e: Exception) {
+                    if (running) {
+                        Log.e("HttpServerShim", "Accept socket loop error", e)
                     }
                 }
-            }.start()
-        } catch (e: Exception) {
-            Log.e("HttpServerShim", "Failed to start server on port ${address.port}", e)
-        }
+            }
+        }.start()
     }
 
     fun stop(delay: Int) {

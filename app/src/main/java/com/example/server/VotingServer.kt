@@ -43,6 +43,10 @@ object VotingServer {
     private val _logsFlow = MutableStateFlow<List<String>>(emptyList())
     val logsFlow = _logsFlow.asStateFlow()
 
+    // Active port allocation flow to handle dynamic backup bindings
+    private val _serverPortFlow = MutableStateFlow(3000)
+    val serverPortFlow = _serverPortFlow.asStateFlow()
+
     // Host configurations parsed from assets .env
     var port = 3000
     var jwtSecret = "super_secure_unpredictable_secret_key_64_characters_long"
@@ -88,16 +92,32 @@ object VotingServer {
             loadEnv(context)
             val database = AppDatabase.getDatabase(context)
 
-            try {
-                server = HttpServer.create(InetSocketAddress(port), 0).apply {
-                    executor = serverExecutor
-                    createContext("/", RequestHandler(context, database))
-                    start()
+            var attempts = 0
+            val maxAttempts = 10
+            var boundSuccessfully = false
+            val startPort = port
+
+            while (attempts < maxAttempts && !boundSuccessfully) {
+                val currentPort = startPort + attempts
+                try {
+                    val candidateServer = HttpServer.create(InetSocketAddress(currentPort), 0).apply {
+                        executor = serverExecutor
+                        createContext("/", RequestHandler(context, database))
+                        start()
+                    }
+                    server = candidateServer
+                    port = currentPort
+                    _serverPortFlow.value = currentPort
+                    boundSuccessfully = true
+                    addLog("Server successfully started on port $port")
+                    addLog("Trust Proxy headers enabled. WAL Database journal is active.")
+                } catch (e: Exception) {
+                    attempts++
+                    Log.w(TAG, "Port $currentPort already in use or bind failed: ${e.message}, trying next...")
                 }
-                addLog("Server successfully started on port $port")
-                addLog("Trust Proxy headers enabled. WAL Database journal is active.")
-            } catch (e: Exception) {
-                addLog("FATAL: Failed to launch HttpServer on port $port: ${e.message}")
+            }
+            if (!boundSuccessfully) {
+                addLog("FATAL: Failed to launch HttpServer on any port from $startPort to ${startPort + maxAttempts - 1}")
             }
         }
     }

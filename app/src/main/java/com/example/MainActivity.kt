@@ -96,10 +96,11 @@ fun MainScreen(
     
     // Server logs list from Flow
     val logs by VotingServer.logsFlow.collectAsStateWithLifecycle()
+    val serverPort by VotingServer.serverPortFlow.collectAsStateWithLifecycle()
 
     // Screen State Management
     var selectedTab by remember { mutableStateOf(0) } // 0: Voter, 1: Admin Dashboard, 2: Control Hub
-    var webUrl by remember { mutableStateOf("http://localhost:3000") }
+    var webUrl by remember(serverPort) { mutableStateOf("http://localhost:$serverPort") }
     var showLogsConsole by remember { mutableStateOf(false) }
 
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
@@ -132,11 +133,11 @@ fun MainScreen(
         }
     }
 
-    // Effect to update web WebView target URL based on selected tabs
-    LaunchedEffect(selectedTab) {
+    // Effect to update web WebView target URL based on selected tabs and port
+    LaunchedEffect(selectedTab, serverPort) {
         webUrl = when (selectedTab) {
-            0 -> "http://localhost:3000"
-            1 -> "http://localhost:3000/admin.html"
+            0 -> "http://localhost:$serverPort"
+            1 -> "http://localhost:$serverPort/admin.html"
             else -> webUrl
         }
     }
