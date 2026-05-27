@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Accessible Layout Design Voting</title>
+  <link rel="stylesheet" href="/styles.css">
+</head>
+<body>
+
+  <!-- Screen 1: Roll Entry -->
+  <div id="screen_1" class="spa-screen active">
+    <h1>Layout Voting System</h1>
+    <p class="subtitle">Please enter your roll identifier to retrieve your voter profile.</p>
+    
+    <div id="alert_s1" class="alert-container" aria-live="assertive"></div>
+
+    <form id="form_roll" onsubmit="handleRollSubmit(event)">
+      <label for="input_roll">Voter Roll Identification</label>
+      <input type="text" id="input_roll" placeholder="e.g. 202601" required autocomplete="off" maxlength="30" pattern="^[a-zA-Z0-9_\-]+$">
+      
+      <button type="submit" id="btn_verify_roll" class="btn btn-primary">
+        Verify Roll ID <div id="spinner_s1" class="spinner"></div>
+      </button>
+    </form>
+  </div>
+
+  <!-- Screen 2: Identification Confirmation -->
+  <div id="screen_2" class="spa-screen">
+    <h1>Voter Identity Verified</h1>
+    <p class="subtitle">Please confirm that the retrieved profile card is correct before proceeding.</p>
+
+    <div id="alert_s2" class="alert-container" aria-live="assertive"></div>
+
+    <div style="background-color: var(--bg-color); border: 1px solid var(--surface-border); padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; font-size: 1.1rem; line-height: 1.6;">
+      You are: <strong id="confirm_name_text" style="color: var(--primary-color);"></strong> <br>
+      Roll ID: <strong id="confirm_roll_text"></strong>
+    </div>
+
+    <button type="button" onclick="handleConfirmIdentity(true)" class="btn btn-primary">
+      Yes, proceed <div id="spinner_s2" class="spinner"></div>
+    </button>
+    <button type="button" onclick="handleConfirmIdentity(false)" class="btn btn-secondary">
+      No, re-enter roll
+    </button>
+  </div>
+
+  <!-- Screen 3: Accessible Design Voting Component -->
+  <div id="screen_3" class="spa-screen">
+    <h1>Design Scheme Selection</h1>
+    <p class="subtitle">Cast your vote for each layout design sheet below. You must make a choice for all 5 structures before reviewing.</p>
+
+    <div id="alert_s3" class="alert-container" aria-live="assertive"></div>
+
+    <form id="form_voting" onsubmit="handleReviewSelections(event)">
+      <!-- Design Row 1 -->
+      <fieldset id="design_block_1" class="design-row" aria-describedby="desc_1">
+        <legend id="desc_1">Design Choice 1: Structural Graphic T-Shirt Options</legend>
+        <div class="preview-frame">
+          <img src="/static/designs/1_front.jpg" alt="Design 1 Front View" tabindex="0">
+          <img src="/static/designs/1_back.jpg" alt="Design 1 Back View" tabindex="0">
+        </div>
+        <div class="radio-group">
+          <label for="d1_yes">
+            <input type="radio" id="d1_yes" name="design_1" value="yes" required onclick="onVoteSelectionChanged()"> YES, vote for Design 1
+          </label>
+          <label for="d1_no">
+            <input type="radio" id="d1_no" name="design_1" value="no" required onclick="onVoteSelectionChanged()"> NO, reject Design 1
+          </label>
+        </div>
+      </fieldset>
+
+      <!-- Design Row 2 -->
+      <fieldset id="design_block_2" class="design-row" aria-describedby="desc_2">
+        <legend id="desc_2">Design Choice 2: Elegant Canvas Hoodies</legend>
+        <div class="preview-frame">
+          <img src="/static/designs/2_front.jpg" alt="Design 2 Front View" tabindex="0">
+          <img src="/static/designs/2_back.jpg" alt="Design 2 Back View" tabindex="0">
+        </div>
+        <div class="radio-group">
+          <label for="d2_yes">
+            <input type="radio" id="d2_yes" name="design_2" value="yes" required onclick="onVoteSelectionChanged()"> YES, vote for Design 2
+          </label>
+          <label for="d2_no">
+            <input type="radio" id="d2_no" name="design_2" value="no" required onclick="onVoteSelectionChanged()"> NO, reject Design 2
+          </label>
+        </div>
+      </fieldset>
+
+      <!-- Design Row 3 -->
+      <fieldset id="design_block_3" class="design-row" aria-describedby="desc_3">
+        <legend id="desc_3">Design Choice 3: Vintage Athletic Sweatshirts</legend>
+        <div class="preview-frame">
+          <img src="/static/designs/3_front.jpg" alt="Design 3 Front View" tabindex="0">
+          <img src="/static/designs/3_back.jpg" alt="Design 3 Back View" tabindex="0">
+        </div>
+        <div class="radio-group">
+          <label for="d3_yes">
+            <input type="radio" id="d3_yes" name="design_3" value="yes" required onclick="onVoteSelectionChanged()"> YES, vote for Design 3
+          </label>
+          <label for="d3_no">
+            <input type="radio" id="d3_no" name="design_3" value="no" required onclick="onVoteSelectionChanged()"> NO, reject Design 3
+          </label>
+        </div>
+      </fieldset>
+
+      <!-- Design Row 4 -->
+      <fieldset id="design_block_4" class="design-row" aria-describedby="desc_4">
+        <legend id="desc_4">Design Choice 4: Minimalist Technical Outerwear</legend>
+        <div class="preview-frame">
+          <img src="/static/designs/4_front.jpg" alt="Design 4 Front View" tabindex="0">
+          <img src="/static/designs/4_back.jpg" alt="Design 4 Back View" tabindex="0">
+        </div>
+        <div class="radio-group">
+          <label for="d4_yes">
+            <input type="radio" id="d4_yes" name="design_4" value="yes" required onclick="onVoteSelectionChanged()"> YES, vote for Design 4
+          </label>
+          <label for="d4_no">
+            <input type="radio" id="d4_no" name="design_4" value="no" required onclick="onVoteSelectionChanged()"> NO, reject Design 4
+          </label>
+        </div>
+      </fieldset>
+
+      <!-- Design Row 5 -->
+      <fieldset id="design_block_5" class="design-row" aria-describedby="desc_5">
+        <legend id="desc_5">Design Choice 5: Cosmic Gradient Joggers</legend>
+        <div class="preview-frame">
+          <img src="/static/designs/5_front.jpg" alt="Design 5 Front View" tabindex="0">
+          <img src="/static/designs/5_back.jpg" alt="Design 5 Back View" tabindex="0">
+        </div>
+        <div class="radio-group">
+          <label for="d5_yes">
+            <input type="radio" id="d5_yes" name="design_5" value="yes" required onclick="onVoteSelectionChanged()"> YES, vote for Design 5
+          </label>
+          <label for="d5_no">
+            <input type="radio" id="d5_no" name="design_5" value="no" required onclick="onVoteSelectionChanged()"> NO, reject Design 5
+          </label>
+        </div>
+      </fieldset>
+
+      <button type="submit" id="btn_review_choices" class="btn btn-primary" disabled>
+        Review choices
+      </button>
+    </form>
+  </div>
+
+  <!-- Screen 4: Selection Verification Review -->
+  <div id="screen_4" class="spa-screen">
+    <h1>Verify Your Selections</h1>
+    <p class="subtitle">Please review your submitted choices thoroughly. You cannot alter selections after committing.</p>
+
+    <div id="alert_s4" class="alert-container" aria-live="assertive"></div>
+
+    <div style="margin-bottom: 2rem;">
+      You are <strong id="verify_roll_text" style="color: var(--primary-color);"></strong> <span id="verify_name_text"></span> and you voted for:
+    </div>
+
+    <div id="list_verification" class="verification-list">
+      <!-- Generated dynamically in javascript -->
+    </div>
+
+    <button type="button" id="btn_confirm_submit" onclick="handleSubmitVotes()" class="btn btn-primary">
+      Confirm & submit <div id="spinner_s4" class="spinner"></div>
+    </button>
+    <button type="button" id="btn_back_change" onclick="navigateToScreen(3)" class="btn btn-secondary">
+      Go back and change
+    </button>
+  </div>
+
+  <!-- Screen 5: Submission Confirmed -->
+  <div id="screen_5" class="spa-screen">
+    <div class="success-container">
+      <div class="success-icon" aria-hidden="true">&#10004;</div>
+      <h1>Congratulations!</h1>
+      <p class="subtitle" id="congrats_message" style="margin-bottom: 0;">Your votes have been submitted.</p>
+    </div>
+  </div>
+
+  <!-- Locked State: Concluded Notification block -->
+  <div id="screen_locked" class="spa-screen">
+    <div class="success-container" style="color: var(--text-error);">
+      <div class="success-icon" style="background-color: rgba(239, 68, 68, 0.1); color: var(--text-error);">&#128274;</div>
+      <h1>Voting Has Concluded</h1>
+      <p class="subtitle" style="margin-bottom: 0;">The active voting threshold limit has passed or the window is closed.</p>
+    </div>
+  </div>
+
+
+  <script>
+    // State Erasure Rule: Explicitly flush volatile memory on reload
+    window.currentName = null;
+    window.currentRoll = null;
+    window.currentConfirmNonceToken = null;
+    window.userSelectionCache = null;
+    window.hasAttemptedSubmit = false;
+
+    // Structural Zero-Trust Routing Guards
+    function navigateToScreen(targetScreenId) {
+      if (targetScreenId === 3 && !window.currentConfirmNonceToken) {
+        targetScreenId = 1; // Kick back if token is missing
+      }
+      if (targetScreenId === 4 && (!window.userSelectionCache || window.userSelectionCache.length !== 5)) {
+        targetScreenId = 3; // Force selection return if parameters are unverified
+      }
+
+      // DOM updates
+      document.querySelectorAll('.spa-screen').forEach(el => el.classList.remove('active'));
+      const activeEl = document.getElementById(targetScreenId === 'locked' ? 'screen_locked' : `screen_${targetScreenId}`);
+      if (activeEl) activeEl.classList.add('active');
+
+      // Native clean history wipe
+      history.replaceState(null, "", "");
+    }
+
+    // Initialize SPA on start
+    window.addEventListener('DOMContentLoaded', () => {
+      navigateToScreen(1);
+      startStatusPolling();
+    });
+
+    // Background HTTP status checking loop (GET /status every 60s)
+    let pollingInterval = null;
+    function startStatusPolling() {
+      if (pollingInterval) clearInterval(pollingInterval);
+      
+      const checkStatus = () => {
+        fetch('/status')
+          .then(res => res.json())
+          .then(data => {
+            if (data.voting_open === false) {
+              // Concluded state jump
+              window.currentName = null;
+              window.currentRoll = null;
+              window.currentConfirmNonceToken = null;
+              window.userSelectionCache = null;
+              navigateToScreen('locked');
+            }
+          })
+          .catch(err => console.error("Status polling exception", err));
+      };
+
+      checkStatus();
+      pollingInterval = setInterval(checkStatus, 60000); // Strict 60s loop config
+    }
+
+    // Screen 1 Action -> Verify roll alphanumeric ID
+    function handleRollSubmit(e) {
+      e.preventDefault();
+      const alertDiv = document.getElementById('alert_s1');
+      alertDiv.style.display = 'none';
+
+      const roll = document.getElementById('input_roll').value.trim();
+      if (!roll) return;
+
+      const spinner = document.getElementById('spinner_s1');
+      spinner.style.display = 'inline-block';
+
+      fetch('/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roll: roll })
+      })
+      .then(async res => {
+        spinner.style.display = 'none';
+        if (res.status === 200) {
+          const data = await res.json();
+          // Cache to volatile space memory
+          window.currentName = data.name;
+          window.currentRoll = roll;
+          window.currentConfirmNonceToken = data.confirm_nonce;
+          
+          // Display and navigate
+          document.getElementById('confirm_name_text').innerText = data.name;
+          document.getElementById('confirm_roll_text').innerText = roll;
+          navigateToScreen(2);
+        } else {
+          try {
+            const errData = await res.json();
+            alertDiv.innerText = errData.error || "Profile validation error. Please check Roll ID.";
+          } catch {
+            alertDiv.innerText = "Error " + res.status + ": Access rejected by server.";
+          }
+          alertDiv.style.display = 'block';
+        }
+      })
+      .catch(err => {
+        spinner.style.display = 'none';
+        alertDiv.innerText = "Network connection failed. Try again.";
+        alertDiv.style.display = 'block';
+      });
+    }
+
+    // Screen 2 Action -> Confirm profile details correct
+    function handleConfirmIdentity(isCorrect) {
+      const alertDiv = document.getElementById('alert_s2');
+      alertDiv.style.display = 'none';
+
+      if (!isCorrect) {
+        // Yes, erase variables and load screen 1
+        window.currentName = null;
+        window.currentRoll = null;
+        window.currentConfirmNonceToken = null;
+        document.getElementById('input_roll').value = '';
+        navigateToScreen(1);
+        return;
+      }
+
+      const spinner = document.getElementById('spinner_s2');
+      spinner.style.display = 'inline-block';
+
+      fetch('/auth/confirm', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ confirm_nonce: window.currentConfirmNonceToken })
+      })
+      .then(async res => {
+        spinner.style.display = 'none';
+        if (res.status === 200) {
+          // Success cookie is loaded, proceed to screen 3
+          navigateToScreen(3);
+        } else {
+          // Automated Fallback Recovery Path
+          let errorMsg = "Verification process validation failed.";
+          try {
+            const errData = await res.json();
+            errorMsg = errData.error || errorMsg;
+          } catch {}
+          
+          // Wipe, redirect to screen 1, show details
+          window.currentName = null;
+          window.currentRoll = null;
+          window.currentConfirmNonceToken = null;
+          
+          navigateToScreen(1);
+          const alertS1 = document.getElementById('alert_s1');
+          alertS1.innerText = errorMsg;
+          alertS1.style.display = 'block';
+        }
+      })
+      .catch(err => {
+        spinner.style.display = 'none';
+        alertDiv.innerText = "Processing fault. Connection error.";
+        alertDiv.style.display = 'block';
+      });
+    }
+
+    // Screen 3 Action -> Live Radio monitor limit checking
+    function onVoteSelectionChanged() {
+      const radioChecked = document.querySelectorAll('#form_voting input[type="radio"]:checked');
+      const submitBtn = document.getElementById('btn_review_choices');
+      submitBtn.disabled = (radioChecked.length !== 5);
+    }
+
+    // Screen 3 Form Submit -> Display selections
+    function handleReviewSelections(e) {
+      e.preventDefault();
+      
+      const selections = [];
+      for (let i = 1; i <= 5; i++) {
+        const choice = document.querySelector(`input[name="design_${i}"]:checked`).value;
+        selections.push({ design_id: i, choice: choice });
+      }
+
+      // Cache parameters safely
+      window.userSelectionCache = selections;
+
+      // Draw Screen 4 review panel details
+      document.getElementById('verify_roll_text').innerText = window.currentRoll;
+      document.getElementById('verify_name_text').innerText = " (" + window.currentName + ")";
+
+      const listContainer = document.getElementById('list_verification');
+      listContainer.innerHTML = '';
+
+      selections.forEach(item => {
+        const row = document.createElement('div');
+        row.className = 'verification-item';
+        
+        const label = document.createElement('span');
+        label.className = 'design-title';
+        label.innerText = 'Design Theme #' + item.design_id + ' Alignment:';
+        
+        const badge = document.createElement('span');
+        badge.className = 'vote-badge ' + item.choice;
+        badge.innerText = item.choice.toUpperCase();
+
+        row.appendChild(label);
+        row.appendChild(badge);
+        listContainer.appendChild(row);
+      });
+
+      navigateToScreen(4);
+    }
+
+    // Screen 4 Action -> locks inputs, submits votes to engine
+    function handleSubmitVotes() {
+      const alertDiv = document.getElementById('alert_s4');
+      alertDiv.style.display = 'none';
+
+      // Lock DOM buttons
+      document.getElementById('btn_confirm_submit').disabled = true;
+      document.getElementById('btn_back_change').disabled = true;
+
+      const spinner = document.getElementById('spinner_s4');
+      spinner.style.display = 'inline-block';
+
+      // Fetch controller posting layout
+      // Setup timeout controller limit for 5 seconds
+      const controller = new AbortController();
+      const signalId = setTimeout(() => controller.abort(), 5000);
+
+      fetch('/votes/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ votes: window.userSelectionCache }),
+        signal: controller.signal
+      })
+      .then(async res => {
+        clearTimeout(signalId);
+        spinner.style.display = 'none';
+
+        if (res.status === 200) {
+          // Success 200 return envelope
+          navigateToScreen(5);
+          deleteInteractiveControls();
+        } else if (res.status === 409) {
+          // Network double submit resilience fallback
+          handleResilientCommit();
+        } else {
+          let errMsg = "Voting submission returned non-200 transaction fault.";
+          try {
+            const errData = await res.json();
+            errMsg = errData.error || errMsg;
+          } catch {}
+          triggerSubmissionFailed(errMsg);
+        }
+      })
+      .catch(err => {
+        clearTimeout(signalId);
+        spinner.style.display = 'none';
+        
+        // Timeout Resilience verification
+        if (err.name === 'AbortError' || !window.hasAttemptedSubmit) {
+          handleResilientCommit();
+        } else {
+          triggerSubmissionFailed("Network request timed out. Please retry compilation connection.");
+        }
+      });
+    }
+
+    // Timeout & 409 Resilience Loop
+    function handleResilientCommit() {
+      if (!window.hasAttemptedSubmit) {
+        window.hasAttemptedSubmit = true;
+        // Advanced directly into Screen 5 automatically
+        navigateToScreen(5);
+        deleteInteractiveControls();
+      } else {
+        triggerSubmissionFailed("Vote already tracked or database locked check failure. Choice remains active.");
+      }
+    }
+
+    function triggerSubmissionFailed(msg) {
+      document.getElementById('btn_confirm_submit').disabled = false;
+      document.getElementById('btn_back_change').disabled = false;
+      
+      const alertDiv = document.getElementById('alert_s4');
+      alertDiv.innerText = msg;
+      alertDiv.style.display = 'block';
+    }
+
+    // Delete all interactive voter elements completely on confirmed commit
+    function deleteInteractiveControls() {
+      const screen1 = document.getElementById('screen_1');
+      const screen2 = document.getElementById('screen_2');
+      const screen3 = document.getElementById('screen_3');
+      const screen4 = document.getElementById('screen_4');
+
+      if (screen1) screen1.remove();
+      if (screen2) screen2.remove();
+      if (screen3) screen3.remove();
+      if (screen4) screen4.remove();
+    }
+  </script>
+</body>
+</html>

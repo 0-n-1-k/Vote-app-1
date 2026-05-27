@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Administrative Dashboard Control Panel</title>
+  <link rel="stylesheet" href="/styles.css">
+  <style>
+    /* Admin specific visual alignments */
+    body {
+      align-items: flex-start;
+      padding: 3rem 1.5rem;
+    }
+    .admin-card {
+      background-color: var(--surface-color);
+      border: 1px solid var(--surface-border);
+      border-radius: 12px;
+      padding: 2.5rem;
+      width: 100%;
+      max-width: 900px;
+      margin: auto;
+    }
+    .panel-section {
+      border-top: 1px solid var(--surface-border);
+      padding-top: 2rem;
+      margin-top: 2.5rem;
+    }
+    .section-title {
+      font-size: 1.4rem;
+      font-weight: 700;
+      margin-bottom: 1rem;
+      color: var(--primary-color);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Admin Login Screen -->
+  <div id="admin_login_panel" class="admin-card">
+    <h1>Management Authorization</h1>
+    <p class="subtitle">Secure database interface control dashboard.</p>
+
+    <div id="login_alert" class="alert-container" aria-live="assertive"></div>
+
+    <form onsubmit="handleAdminLogin(event)">
+      <label for="admin_roll">Administrator Roll Code</label>
+      <input type="text" id="admin_roll" required autocomplete="username" pattern="^[a-zA-Z0-9_\-]+$" placeholder="e.g. 202602">
+
+      <label for="admin_password">Management Passcode</label>
+      <input type="password" id="admin_password" required autocomplete="current-password" placeholder="••••••••">
+
+      <button type="submit" class="btn btn-primary" id="btn_login">
+        Login Securely <div id="login_spinner" class="spinner"></div>
+      </button>
+    </form>
+  </div>
+
+  <!-- Admin Dashboard Screen (Hidden initially) -->
+  <div id="admin_dashboard" class="admin-card" style="display: none;">
+    <div class="admin-header">
+      <div>
+        <h1>Database Control Console</h1>
+        <p class="subtitle" style="margin-bottom: 0;">Live SQLite metrics, WAL transaction logs, and results compilation.</p>
+      </div>
+      <div>
+        <button class="btn btn-secondary" onclick="handleLogout()" style="width: auto; margin-top: 0; padding: 0.5rem 1rem;">
+          Log Out
+        </button>
+      </div>
+    </div>
+
+    <!-- Diagnostic Cards Grid -->
+    <div class="dashboard-grid">
+      <div class="stat-card">
+        <div style="color: var(--text-secondary); font-weight: 600;">System Window Status</div>
+        <div id="stat_v_open" class="value" style="color: var(--success-color);">LOADING</div>
+      </div>
+      <div class="stat-card">
+        <div style="color: var(--text-secondary); font-weight: 600;">Time Remaining Floor</div>
+        <div id="stat_seconds_left" class="value">0s</div>
+      </div>
+      <div class="stat-card">
+        <div style="color: var(--text-secondary); font-weight: 600;">Registered Registry profiles</div>
+        <div id="stat_total_voters" class="value">0</div>
+      </div>
+      <div class="stat-card">
+        <div style="color: var(--text-secondary); font-weight: 600;">Committed voter signatures</div>
+        <div id="stat_voted_count" class="value">0</div>
+      </div>
+    </div>
+
+    <!-- Section 1: Paginated Voted Rolls -->
+    <div class="panel-section">
+      <h2 class="section-title">Committed Roll Signatures (Choices Omitted)</h2>
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th class="text-center" style="width: 15%;">Index No.</th>
+              <th style="width: 50%;">Voter Roll Identifier</th>
+              <th class="text-center" style="width: 35%;">Committed Timestamp (UTC)</th>
+            </tr>
+          </thead>
+          <tbody id="voters_voted_table_body">
+            <!-- Populated dynamically via pagination -->
+          </tbody>
+        </table>
+      </div>
+      <div class="pagination-container">
+        <button id="btn_prev_voters" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;" disabled onclick="loadVotedTablePage(-1)">Previous</button>
+        <span id="txt_voters_page_index" style="font-weight: 600; color: var(--text-secondary);">Page 1</span>
+        <button id="btn_next_voters" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;" disabled onclick="loadVotedTablePage(1)">Next</button>
+      </div>
+    </div>
+
+    <!-- Section 2: Aggregates stats per Design ID (1-5) -->
+    <div class="panel-section">
+      <h2 class="section-title">Aggregated Choices Sheets Metrics</h2>
+      <div class="table-responsive">
+        <table>
+          <thead>
+            <tr>
+              <th style="width: 40%;">Design Sheet</th>
+              <th class="text-center" style="width: 20%;">Yes (Accept)</th>
+              <th class="text-center" style="width: 20%;">No (Reject)</th>
+              <th class="text-center" style="width: 20%;">Total Choices</th>
+            </tr>
+          </thead>
+          <tbody id="vote_stats_table_body">
+            <!-- Populated dynamically -->
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- Section 3: Final calculations rankings -->
+    <div class="panel-section" id="results_panel_container">
+      <h2 class="section-title">Calculations Compilation (Ranked Results)</h2>
+      
+      <!-- Displayed when locked -->
+      <div id="results_locked_pane" class="results-locked-pane">
+        <p style="font-size: 1.15rem; font-weight: 700; color: var(--text-error); margin-bottom: 0.5rem;">Results tabulation currently locked</p>
+        <p style="color: var(--text-secondary); font-size: 0.95rem;">Rankings computations remain locked until the temporal end time constraints expire.</p>
+      </div>
+
+      <!-- Displayed when unlocked -->
+      <div id="results_unlocked_pane" style="display: none;">
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th class="text-center" style="width: 15%;">Rank Position</th>
+                <th style="width: 30%;">Layout Sheet ID</th>
+                <th class="text-center" style="width: 20%;">Score (Yes - No)</th>
+                <th class="text-center" style="width: 15%;">Total Votes</th>
+                <th class="text-center" style="width: 20%;">Split Ratio</th>
+              </tr>
+            </thead>
+            <tbody id="results_ranked_table_body">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    let currentVotersPage = 1;
+    let pollDiagnosticTimer = null;
+    let votingEndCountSeconds = 0;
+
+    // Run verification status checks
+    window.addEventListener('DOMContentLoaded', () => {
+      // Check if session token exists
+      fetch('/admin/status')
+        .then(res => {
+          if (res.status === 200) {
+            showDashboardPanel();
+          }
+        })
+        .catch(err => console.error("Session verification failed", err));
+    });
+
+    // Login Action
+    function handleAdminLogin(e) {
+      e.preventDefault();
+      
+      const alertDiv = document.getElementById('login_alert');
+      alertDiv.style.display = 'none';
+
+      const roll = document.getElementById('admin_roll').value.trim();
+      const password = document.getElementById('admin_password').value;
+
+      const spinner = document.getElementById('login_spinner');
+      spinner.style.display = 'inline-block';
+
+      fetch('/admin/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roll, password })
+      })
+      .then(async res => {
+        spinner.style.display = 'none';
+        if (res.status === 200) {
+          showDashboardPanel();
+        } else {
+          try {
+            const errData = await res.json();
+            alertDiv.innerText = errData.error || "Authentication details failed.";
+          } catch {
+            alertDiv.innerText = "Error " + res.status + " executing security handshake.";
+          }
+          alertDiv.style.display = 'block';
+        }
+      })
+      .catch(err => {
+        spinner.style.display = 'none';
+        alertDiv.innerText = "Processing fault. Network unreachable.";
+        alertDiv.style.display = 'block';
+      });
+    }
+
+    function showDashboardPanel() {
+      document.getElementById('admin_login_panel').style.display = 'none';
+      document.getElementById('admin_dashboard').style.display = 'block';
+      
+      currentVotersPage = 1;
+      queryDiagnosticStats();
+
+      // Launch diagnostic monitoring checks on 30-second loop
+      if (pollDiagnosticTimer) clearInterval(pollDiagnosticTimer);
+      pollDiagnosticTimer = setInterval(queryDiagnosticStats, 30000);
+    }
+
+    function handleLogout() {
+      fetch('/auth/logout')
+        .then(() => {
+          if (pollDiagnosticTimer) clearInterval(pollDiagnosticTimer);
+          document.getElementById('admin_dashboard').style.display = 'none';
+          document.getElementById('admin_login_panel').style.display = 'block';
+          document.getElementById('admin_password').value = '';
+        });
+    }
+
+    // Core diagnostic metrics aggregation
+    function queryDiagnosticStats() {
+      // 1. Fetch system status
+      fetch('/admin/status')
+        .then(async res => {
+          if (res.status === 200) {
+            const data = await res.json();
+            
+            const isOpen = data.voting_open;
+            const remaining = data.time_remaining_seconds;
+            votingEndCountSeconds = remaining;
+
+            document.getElementById('stat_v_open').innerText = isOpen ? "OPEN" : "CLOSED";
+            document.getElementById('stat_v_open').style.color = isOpen ? "var(--success-color)" : "var(--text-error)";
+            
+            // Format time remaining
+            const hours = Math.floor(remaining / 3600);
+            const minutes = Math.floor((remaining % 3600) / 60);
+            const secs = remaining % 60;
+            document.getElementById('stat_seconds_left').innerText = `${hours}h ${minutes}m ${secs}s`;
+
+            document.getElementById('stat_total_voters').innerText = data.total_voters;
+            document.getElementById('stat_voted_count').innerText = data.voted_count;
+
+            // Direct result unlocking check
+            if (votingEndCountSeconds === 0) {
+              fetchRankedResults();
+            } else {
+              document.getElementById('results_locked_pane').style.display = 'block';
+              document.getElementById('results_unlocked_pane').style.display = 'none';
+            }
+          } else {
+            handleLogout();
+          }
+        })
+        .catch(err => console.error("Status check loop exception", err));
+
+      // 2. Fetch voters voted table page
+      fetchVotersVotedTable();
+
+      // 3. Fetch aggregations stats
+      fetchVotesAggregateStats();
+    }
+
+    // Section 1: Fetch Voters Voted table page
+    function fetchVotersVotedTable() {
+      fetch(`/admin/voters-voted?page=${currentVotersPage}`)
+        .then(res => res.json())
+        .then(data => {
+          const tbody = document.getElementById('voters_voted_table_body');
+          tbody.innerHTML = '';
+
+          const startIdx = (currentVotersPage - 1) * data.page_size + 1;
+          
+          if (data.data.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-secondary);">No votes recorded yet in SQLite.</td></tr>';
+          } else {
+            data.data.forEach((item, index) => {
+              const tr = document.createElement('tr');
+              
+              const tdIndex = document.createElement('td');
+              tdIndex.className = 'text-center';
+              tdIndex.innerText = startIdx + index;
+
+              const tdRoll = document.createElement('td');
+              tdRoll.innerText = item.roll;
+
+              const tdTime = document.createElement('td');
+              tdTime.className = 'text-center';
+              const date = new Date(item.voted_at * 1000);
+              tdTime.innerText = date.toUTCString();
+
+              tr.appendChild(tdIndex);
+              tr.appendChild(tdRoll);
+              tr.appendChild(tdTime);
+              tbody.appendChild(tr);
+            });
+          }
+
+          document.getElementById('txt_voters_page_index').innerText = `Page ${data.page}`;
+          document.getElementById('btn_prev_voters').disabled = (data.page <= 1);
+          document.getElementById('btn_next_voters').disabled = (startIdx + data.data.length > data.total);
+        })
+        .catch(err => console.error(err));
+    }
+
+    function loadVotedTablePage(direction) {
+      currentVotersPage += direction;
+      fetchVotersVotedTable();
+    }
+
+    // Section 2: Fetch overall vote-stats
+    function fetchVotesAggregateStats() {
+      fetch('/admin/vote-stats')
+        .then(res => res.json())
+        .then(data => {
+          const tbody = document.getElementById('vote_stats_table_body');
+          tbody.innerHTML = '';
+
+          // Let's map design_id to structural titles used in voting page for incredible polish
+          const sheetNames = {
+            1: "Design 1: T-Shirt Options",
+            2: "Design 2: Canvas Hoodies",
+            3: "Design 3: Athletic Sweatshirts",
+            4: "Design 4: Technical Outerwear",
+            5: "Design 5: Gradient Joggers"
+          };
+
+          data.stats.forEach(s => {
+            const tr = document.createElement('tr');
+            
+            const tdId = document.createElement('td');
+            const name = sheetNames[s.design_id] || `Design Sheet #${s.design_id}`;
+            tdId.innerHTML = `<strong>${name}</strong>`;
+
+            const tdYes = document.createElement('td');
+            tdYes.className = 'text-center';
+            tdYes.innerText = s.yes_votes;
+            tdYes.style.color = "var(--success-color)";
+
+            const tdNo = document.createElement('td');
+            tdNo.className = 'text-center';
+            tdNo.innerText = s.no_votes;
+            tdNo.style.color = "var(--text-error)";
+
+            const tdTotal = document.createElement('td');
+            tdTotal.className = 'text-center';
+            tdTotal.innerText = s.total_votes;
+
+            tr.appendChild(tdId);
+            tr.appendChild(tdYes);
+            tr.appendChild(tdNo);
+            tr.appendChild(tdTotal);
+            tbody.appendChild(tr);
+          });
+        })
+        .catch(err => console.error(err));
+    }
+
+    // Section 3: Fetch final results
+    function fetchRankedResults() {
+      fetch('/admin/results')
+        .then(res => {
+          if (res.status === 200) {
+            return res.json();
+          } else {
+            throw new Error("Results locked by server constraint verification.");
+          }
+        })
+        .then(results => {
+          document.getElementById('results_locked_pane').style.display = 'none';
+          const unlockedPane = document.getElementById('results_unlocked_pane');
+          unlockedPane.style.display = 'block';
+
+          const tbody = document.getElementById('results_ranked_table_body');
+          tbody.innerHTML = '';
+
+          const sheetNamesShort = {
+            1: "Design 1 (T-Shirts)",
+            2: "Design 2 (Hoodies)",
+            3: "Design 3 (Sweatshirts)",
+            4: "Design 4 (Outerwear)",
+            5: "Design 5 (Joggers)"
+          };
+
+          results.forEach((r, idx) => {
+            const tr = document.createElement('tr');
+            
+            const tdRank = document.createElement('td');
+            tdRank.className = 'text-center';
+            tdRank.innerHTML = `<strong>#${idx + 1}</strong>`;
+
+            const tdId = document.createElement('td');
+            const name = sheetNamesShort[r.design_id] || `Design Sheet #${r.design_id}`;
+            tdId.innerText = name;
+
+            const tdScore = document.createElement('td');
+            tdScore.className = 'text-center';
+            tdScore.innerHTML = `<strong style="color: var(--primary-color);">${r.score > 0 ? '+' : ''}${r.score}</strong>`;
+
+            const tdTotal = document.createElement('td');
+            tdTotal.className = 'text-center';
+            tdTotal.innerText = r.total_votes;
+
+            const tdRatio = document.createElement('td');
+            tdRatio.className = 'text-center';
+            const pct = r.total_votes > 0 ? Math.round((r.yes_votes / r.total_votes) * 100) : 0;
+            tdRatio.innerText = `${pct}% Yes (${r.yes_votes} / ${r.no_votes})`;
+
+            tr.appendChild(tdRank);
+            tr.appendChild(tdId);
+            tr.appendChild(tdScore);
+            tr.appendChild(tdTotal);
+            tr.appendChild(tdRatio);
+            tbody.appendChild(tr);
+          });
+        })
+        .catch(err => {
+          document.getElementById('results_locked_pane').style.display = 'block';
+          document.getElementById('results_unlocked_pane').style.display = 'none';
+        });
+    }
+  </script>
+</body>
+</html>

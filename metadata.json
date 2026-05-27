@@ -1,0 +1,6 @@
+{
+  "name": "Layout Voting",
+  "description": "Secure design layout voting application styled with the refined Sophisticated Dark Material 3 aesthetic, backed by an offline SQLite database.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
