@@ -19,17 +19,20 @@ jobs:
         java-version: '11'
         distribution: 'temurin'
         cache: gradle
-        
     - name: Grant execute permission for gradlew
-      working-directory: ./app
-      run: chmod +x gradlew
+      run: |
+        if [ -f "gradlew" ]; then
+          chmod +x gradlew
+        elif [ -f "app/gradlew" ]; then
+          chmod +x app/gradlew
+        else
+          echo "Looking for gradlew..." && find . -name "gradlew"
+        fi
 
     - name: Build Debug APK
-      working-directory: ./app
-      run: ./gradlew assembleDebug
-
-    - name: Upload APK Artifact
-      uses: actions/upload-artifact@v4
-      with:
-        name: vote-app-debug-apk
-        path: app/build/outputs/apk/debug/app-debug.apk
+      run: |
+        if [ -f "gradlew" ]; then
+          ./gradlew assembleDebug
+        elif [ -f "app/gradlew" ]; then
+          cd app && ./gradlew assembleDebug
+        fi
