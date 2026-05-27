@@ -24,6 +24,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
@@ -36,6 +37,7 @@ import androidx.compose.foundation.BorderStroke
 import com.example.db.AppDatabase
 import com.example.db.ConfigEntity
 import com.example.db.DatabaseSeeder
+import com.example.db.DbDesignStats
 import com.example.server.VotingServer
 import com.example.ui.theme.MyApplicationTheme
 import com.example.ui.theme.SlateBg
@@ -91,31 +93,12 @@ fun MainScreen(
     onStartServer: () -> Unit
 ) {
     val context = LocalContext.current
-    val coroutineScope = rememberCoroutineScope()
     val database = remember { AppDatabase.getDatabase(context) }
-    
-    // Server logs list from Flow
-    val logs by VotingServer.logsFlow.collectAsStateWithLifecycle()
     val serverPort by VotingServer.serverPortFlow.collectAsStateWithLifecycle()
+    val serverReady by VotingServer.serverReadyFlow.collectAsStateWithLifecycle()
 
-    // Screen State Management
-    var selectedTab by remember { mutableStateOf(0) } // 0: Voter, 1: Admin Dashboard, 2: Control Hub
-    var webUrl by remember(serverPort) { mutableStateOf("http://localhost:$serverPort") }
-    var showLogsConsole by remember { mutableStateOf(false) }
-
-    var webViewRef by remember { mutableStateOf<WebView?>(null) }
-
-    // Safely load the new URL only when selected tab changes the webUrl target,
-    // avoiding reloading when sub-navigating or when a database log updates the flow.
-    LaunchedEffect(webUrl) {
-        webViewRef?.let { webView ->
-            val current = webView.url?.removeSuffix("/") ?: ""
-            val target = webUrl.removeSuffix("/")
-            if (current != target) {
-                webView.loadUrl(webUrl)
-            }
-        }
-    }
+    // Screen State Management (0: Voter Station, 1: Admin Console)
+    var selectedTab by remember { mutableStateOf(0) }
 
     // Auto-seed data on launch if voters table is completely empty
     LaunchedEffect(Unit) {
@@ -130,15 +113,6 @@ fun MainScreen(
             } else {
                 VotingServer.addLog("AUTOLOAD PRE-FLIGHT: Database seeder failed to insert rows.")
             }
-        }
-    }
-
-    // Effect to update web WebView target URL based on selected tabs and port
-    LaunchedEffect(selectedTab, serverPort) {
-        webUrl = when (selectedTab) {
-            0 -> "http://localhost:$serverPort"
-            1 -> "http://localhost:$serverPort/admin.html"
-            else -> webUrl
         }
     }
 
@@ -195,7 +169,7 @@ fun MainScreen(
 
                 Spacer(modifier = Modifier.height(10.dp))
 
-                // Standard Material Theme Tabs Bar
+                // Standard Material Theme Tabs Bar - Custom-configured names
                 TabRow(
                     selectedTabIndex = selectedTab,
                     containerColor = Color.Transparent,
@@ -207,7 +181,7 @@ fun MainScreen(
                         onClick = { selectedTab = 0 },
                         text = {
                             Text(
-                                text = "VOTER APP",
+                                text = "VOTING STATION",
                                 fontWeight = if (selectedTab == 0) FontWeight.ExtraBold else FontWeight.Medium,
                                 fontSize = 12.sp,
                                 color = if (selectedTab == 0) SlateBlue else SlateGrey
@@ -219,22 +193,10 @@ fun MainScreen(
                         onClick = { selectedTab = 1 },
                         text = {
                             Text(
-                                text = "ADMIN PANEL",
+                                text = "ADMIN PORTAL",
                                 fontWeight = if (selectedTab == 1) FontWeight.ExtraBold else FontWeight.Medium,
                                 fontSize = 12.sp,
                                 color = if (selectedTab == 1) SlateBlue else SlateGrey
-                            )
-                        }
-                    )
-                    Tab(
-                        selected = (selectedTab == 2),
-                        onClick = { selectedTab = 2 },
-                        text = {
-                            Text(
-                                text = "STATE HUB",
-                                fontWeight = if (selectedTab == 2) FontWeight.ExtraBold else FontWeight.Medium,
-                                fontSize = 12.sp,
-                                color = if (selectedTab == 2) SlateBlue else SlateGrey
                             )
                         }
                     )
@@ -249,399 +211,98 @@ fun MainScreen(
                 .fillMaxWidth()
                 .padding(horizontal = 8.dp)
         ) {
-            if (selectedTab == 0 || selectedTab == 1) {
-                // Interactive Embedded browser View
-                Box(
-                    modifier = Modifier
-                        .fillMaxSize()
-                        .border(1.dp, SlateBorder, RoundedCornerShape(8.dp))
-                ) {
-                    AndroidView(
-                        factory = { ctx ->
-                            WebView(ctx).apply {
-                                settings.apply {
-                                    javaScriptEnabled = true
-                                    domStorageEnabled = true
-                                    databaseEnabled = true
-                                    useWideViewPort = true
-                                    loadWithOverviewMode = true
-                                    allowFileAccess = true
-                                    allowContentAccess = true
-                                }
-                                webViewClient = object : WebViewClient() {
-                                    override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
-                                        return false
-                                    }
-                                }
-                                webViewRef = this
-                                loadUrl(webUrl)
+            // Persistence Voter WebView Container
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        alpha = if (selectedTab == 0) 1f else 0f
+                        translationX = if (selectedTab == 0) 0f else 20000f
+                    }
+                    .border(1.dp, SlateBorder, RoundedCornerShape(8.dp))
+            ) {
+                AndroidView(
+                    factory = { ctx ->
+                        WebView(ctx).apply {
+                            settings.apply {
+                                javaScriptEnabled = true
+                                domStorageEnabled = true
+                                databaseEnabled = true
+                                useWideViewPort = false
+                                loadWithOverviewMode = false
+                                textZoom = 100
+                                setSupportZoom(true)
+                                builtInZoomControls = true
+                                displayZoomControls = false
+                                allowFileAccess = true
+                                allowContentAccess = true
                             }
-                        },
-                        update = { view ->
-                            webViewRef = view
-                        },
-                        modifier = Modifier.fillMaxSize()
-                    )
-                }
-            } else {
-                // Configuration Controls Panel
-                ControlHubPanel(
-                    database = database,
-                    onSeedTriggered = {
-                        coroutineScope.launch {
-                            val success = DatabaseSeeder.seedDatabase(context, database, VotingServer.votingEndTimeStr)
-                            if (success) {
-                                Toast.makeText(context, "Database seeded successfully!", Toast.LENGTH_SHORT).show()
-                                VotingServer.addLog("ADMIN OVERLAY: Seeding trigger invoked successfully!")
-                            } else {
-                                Toast.makeText(context, "Seeding failed. See logs below.", Toast.LENGTH_LONG).show()
+                            webViewClient = object : WebViewClient() {
+                                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                                    return false
+                                }
                             }
                         }
                     },
-                    onTimeOverrideUtc = { overrideIsoString ->
-                        coroutineScope.launch {
-                            withContext(Dispatchers.IO) {
-                                val formatted = overrideIsoString.replace("T", " ").replace("Z", "")
-                                database.configDao().insertConfig(ConfigEntity("voting_end_time", formatted))
-                                // If override is past cutoff, set voting_open state directly to 0
-                                val nowSec = Instant.now().epochSecond
-                                val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-                                    .withZone(java.time.ZoneOffset.UTC)
-                                val endSec = try {
-                                    java.time.Instant.from(formatter.parse(formatted)).epochSecond
-                                } catch (e: Exception) {
-                                    nowSec + 7200L
-                                }
-                                if (nowSec >= endSec) {
-                                    database.configDao().insertConfig(ConfigEntity("voting_open", "0"))
-                                } else {
-                                    database.configDao().insertConfig(ConfigEntity("voting_open", "1"))
-                                }
+                    update = { view ->
+                        if (serverReady) {
+                            val targetUrl = "http://127.0.0.1:$serverPort"
+                            if (view.url != targetUrl) {
+                                view.loadUrl(targetUrl)
                             }
-                            Toast.makeText(context, "End time successfully overridden in SQLite config!", Toast.LENGTH_SHORT).show()
-                            VotingServer.addLog("ADMIN OVERLAY: Overrode voting_end_time config to '$overrideIsoString'.")
                         }
-                    }
+                    },
+                    modifier = Modifier.fillMaxSize()
                 )
             }
+
+            // Persistence Admin WebView Container
+            Box(
+                modifier = Modifier
+                    .fillMaxSize()
+                    .graphicsLayer {
+                        alpha = if (selectedTab == 1) 1f else 0f
+                        translationX = if (selectedTab == 1) 0f else 20000f
+                    }
+                    .border(1.dp, SlateBorder, RoundedCornerShape(8.dp))
+            ) {
+                AndroidView(
+                    factory = { ctx ->
+                        WebView(ctx).apply {
+                            settings.apply {
+                                javaScriptEnabled = true
+                                domStorageEnabled = true
+                                databaseEnabled = true
+                                useWideViewPort = false
+                                loadWithOverviewMode = false
+                                textZoom = 100
+                                setSupportZoom(true)
+                                builtInZoomControls = true
+                                displayZoomControls = false
+                                allowFileAccess = true
+                                allowContentAccess = true
+                            }
+                            webViewClient = object : WebViewClient() {
+                                override fun shouldOverrideUrlLoading(view: WebView?, request: WebResourceRequest?): Boolean {
+                                    return false
+                                }
+                            }
+                        }
+                    },
+                    update = { view ->
+                        if (serverReady) {
+                            val targetUrl = "http://127.0.0.1:$serverPort/admin.html"
+                            if (view.url != targetUrl) {
+                                view.loadUrl(targetUrl)
+                            }
+                        }
+                    },
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
+
         }
 
         Spacer(modifier = Modifier.height(8.dp))
-    }
-}
-
-@Composable
-fun ControlHubPanel(
-    database: AppDatabase,
-    onSeedTriggered: () -> Unit,
-    onTimeOverrideUtc: (String) -> Unit
-) {
-    var votesCount by remember { mutableStateOf(0) }
-    var configStartTimeText by remember { mutableStateOf("LOADING") }
-    var configEndTimeText by remember { mutableStateOf("LOADING") }
-    
-    var startInputText by remember { mutableStateOf("") }
-    var endInputText by remember { mutableStateOf("") }
-    
-    val coroutineScope = rememberCoroutineScope()
-    var isSeeding by remember { mutableStateOf(false) }
-    var isOverriding by remember { mutableStateOf(false) }
-    val context = LocalContext.current
-
-    // Query status stats reactively
-    LaunchedEffect(Unit) {
-        val count = withContext(Dispatchers.IO) { database.votedRollDao().getVotedRollsCount() }
-        val rawStart = withContext(Dispatchers.IO) { database.configDao().getConfigValue("voting_start_time") } ?: "2026-05-01 00:00:00"
-        val rawEnd = withContext(Dispatchers.IO) { database.configDao().getConfigValue("voting_end_time") } ?: "2026-08-01 14:00:00"
-        votesCount = count
-        configStartTimeText = rawStart
-        configEndTimeText = rawEnd
-        startInputText = rawStart
-        endInputText = rawEnd
-    }
-
-    val saveTemporalSettings = { startStr: String, endStr: String ->
-        coroutineScope.launch {
-            val (updatedStart, updatedEnd) = withContext(Dispatchers.IO) {
-                database.configDao().insertConfig(ConfigEntity("voting_start_time", startStr.trim()))
-                database.configDao().insertConfig(ConfigEntity("voting_end_time", endStr.trim()))
-                
-                // Read back
-                val rawStart = database.configDao().getConfigValue("voting_start_time") ?: "2026-05-01 00:00:00"
-                val rawEnd = database.configDao().getConfigValue("voting_end_time") ?: "2026-08-01 14:00:00"
-                
-                // Evaluate and update voting_open inside SQLite config
-                val nowSec = Instant.now().epochSecond
-                val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-                    .withZone(java.time.ZoneOffset.UTC)
-                val startSec = try {
-                    java.time.Instant.from(formatter.parse(rawStart)).epochSecond
-                } catch (e: Exception) {
-                    0L
-                }
-                val endSec = try {
-                    java.time.Instant.from(formatter.parse(rawEnd)).epochSecond
-                } catch (e: Exception) {
-                    nowSec + 7200L
-                }
-                
-                if (nowSec >= endSec) {
-                    database.configDao().insertConfig(ConfigEntity("voting_open", "0"))
-                } else if (nowSec >= startSec) {
-                    database.configDao().insertConfig(ConfigEntity("voting_open", "1"))
-                }
-                
-                Pair(rawStart, rawEnd)
-            }
-            
-            // Safe main-thread UI state mutations
-            configStartTimeText = updatedStart
-            configEndTimeText = updatedEnd
-            startInputText = updatedStart
-            endInputText = updatedEnd
-            
-            Toast.makeText(context, "Temporal configurations successfully saved!", Toast.LENGTH_SHORT).show()
-            VotingServer.addLog("ADMIN OVERLAY: Modified voting window settings. Start: '$startStr', End: '$endStr'")
-        }
-    }
-
-    LazyColumn(
-        modifier = Modifier
-            .fillMaxSize()
-            .background(SlateSurface)
-            .border(1.dp, SlateBorder, RoundedCornerShape(8.dp))
-            .padding(16.dp),
-        verticalArrangement = Arrangement.spacedBy(14.dp)
-    ) {
-        item {
-            Text(
-                text = "State Overrides & Reset Engine",
-                fontSize = 18.sp,
-                fontWeight = FontWeight.Black,
-                color = SlateWhite,
-                modifier = Modifier.padding(bottom = 6.dp)
-            )
-            Text(
-                text = "Simulate all double-submission exceptions, rate limits, and time cutoff guards natively in SQLite.",
-                fontSize = 12.sp,
-                color = SlateGrey,
-                modifier = Modifier.padding(bottom = 12.dp)
-            )
-        }
-
-        // Action card: Re-Seed database
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = SlateBg),
-                border = BorderStroke(1.dp, SlateBorder)
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text(
-                        text = "DATABASE SEED WORKER",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SlateBlue
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    Text(
-                        text = "Parses voters.csv and management_passwords.csv from raw assets and structures database.",
-                        fontSize = 12.sp,
-                        color = SlateGrey
-                    )
-                    Spacer(modifier = Modifier.height(12.dp))
-                    Button(
-                        onClick = {
-                            if (!isSeeding) {
-                                isSeeding = true
-                                onSeedTriggered()
-                                coroutineScope.launch {
-                                    kotlinx.coroutines.delay(3000)
-                                    isSeeding = false
-                                }
-                            }
-                        },
-                        enabled = !isSeeding,
-                        colors = ButtonDefaults.buttonColors(containerColor = SlateBlue),
-                        shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier.fillMaxWidth().height(44.dp)
-                    ) {
-                        Text(if (isSeeding) "SEEDING..." else "RUN SEEDING TRANSACTION", fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                    }
-                }
-            }
-        }
-
-        // Action card: Set time cutoff overrides
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = SlateBg),
-                border = BorderStroke(1.dp, SlateBorder)
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text(
-                        text = "TEMPORAL SYSTEM OVERRIDES",
-                        fontSize = 13.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SlateBlue
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    Text(
-                        text = "Customize the active window of the selection process. Format: YYYY-MM-DD HH:MM:SS (UTC)",
-                        fontSize = 11.sp,
-                        color = SlateGrey
-                    )
-                    Spacer(modifier = Modifier.height(14.dp))
-                    
-                    Text(
-                        text = "START TIME",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SlateBlue
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    
-                    OutlinedTextField(
-                        value = startInputText,
-                        onValueChange = { startInputText = it },
-                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = SlateWhite, fontFamily = FontFamily.Monospace),
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = SlateBlue,
-                            unfocusedBorderColor = SlateBorder,
-                            focusedContainerColor = SlateSurface,
-                            unfocusedContainerColor = SlateSurface
-                        )
-                    )
-                    
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    Text(
-                        text = "END TIME",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SlateBlue
-                    )
-                    Spacer(modifier = Modifier.height(4.dp))
-                    
-                    OutlinedTextField(
-                        value = endInputText,
-                        onValueChange = { endInputText = it },
-                        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp, color = SlateWhite, fontFamily = FontFamily.Monospace),
-                        modifier = Modifier.fillMaxWidth(),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedBorderColor = SlateBlue,
-                            unfocusedBorderColor = SlateBorder,
-                            focusedContainerColor = SlateSurface,
-                            unfocusedContainerColor = SlateSurface
-                        )
-                    )
-                    
-                    Spacer(modifier = Modifier.height(14.dp))
-                    
-                    Button(
-                        onClick = {
-                            saveTemporalSettings(startInputText, endInputText)
-                        },
-                        colors = ButtonDefaults.buttonColors(containerColor = SlateBlue),
-                        shape = RoundedCornerShape(6.dp),
-                        modifier = Modifier.fillMaxWidth().height(44.dp)
-                    ) {
-                        Text("SAVE TEMPORAL SETTINGS", fontSize = 12.sp, fontWeight = FontWeight.Bold)
-                    }
-                    
-                    Spacer(modifier = Modifier.height(16.dp))
-                    HorizontalDivider(color = SlateBorder)
-                    Spacer(modifier = Modifier.height(12.dp))
-                    
-                    Text(
-                        text = "QUICK SHIFT PRESETS",
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SlateGrey
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(8.dp)
-                    ) {
-                        // Choice 1: Close Windows
-                        Button(
-                            onClick = {
-                                if (!isOverriding) {
-                                    isOverriding = true
-                                    val now = Instant.now()
-                                    val startIsoStr = now.minusSeconds(7200).toString() // 2 hours past
-                                    val endIsoStr = now.minusSeconds(3600).toString() // 1 hour past
-                                    val formattedStart = startIsoStr.replace("T", " ").substring(0, 19)
-                                    val formattedEnd = endIsoStr.replace("T", " ").substring(0, 19)
-                                    
-                                    saveTemporalSettings(formattedStart, formattedEnd)
-                                    
-                                    coroutineScope.launch {
-                                        kotlinx.coroutines.delay(2000)
-                                        isOverriding = false
-                                    }
-                                }
-                            },
-                            enabled = !isOverriding,
-                            colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                            shape = RoundedCornerShape(6.dp),
-                            modifier = Modifier.weight(1f).height(44.dp)
-                        ) {
-                            Text("FORCE CLOSED (Past)", fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                        }
-
-                        // Choice 2: Re-open
-                        Button(
-                            onClick = {
-                                if (!isOverriding) {
-                                    isOverriding = true
-                                    val formattedStart = "2026-05-01 00:00:00"
-                                    val formattedEnd = "2026-08-01 14:00:00"
-                                    
-                                    saveTemporalSettings(formattedStart, formattedEnd)
-                                    
-                                    coroutineScope.launch {
-                                        kotlinx.coroutines.delay(2000)
-                                        isOverriding = false
-                                    }
-                                }
-                            },
-                            enabled = !isOverriding,
-                            colors = ButtonDefaults.buttonColors(containerColor = SlateGreen),
-                            shape = RoundedCornerShape(6.dp),
-                            modifier = Modifier.weight(1f).height(44.dp)
-                        ) {
-                            Text("FORCE OPEN (Future)", fontSize = 11.sp, fontWeight = FontWeight.Bold, textAlign = TextAlign.Center)
-                        }
-                    }
-                }
-            }
-        }
-
-        // Info table: accounts preloaded
-        item {
-            Card(
-                colors = CardDefaults.cardColors(containerColor = SlateBg),
-                border = BorderStroke(1.dp, SlateBorder)
-            ) {
-                Column(modifier = Modifier.padding(14.dp)) {
-                    Text(
-                        text = "PRE-CONFIGURED TEST PASSPORT CREDENTIALS",
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Bold,
-                        color = SlateGrey
-                    )
-                    Spacer(modifier = Modifier.height(8.dp))
-                    
-                    Text("• Alice Smith (Voter S1-S5): Roll = 202601", fontSize = 12.sp, color = SlateWhite)
-                    Text("• Bob Johnson (Manager / S1-S5 + Admin): Roll = 202602, Pass = pass1234", fontSize = 12.sp, color = SlateWhite)
-                    Text("• Charlie Brown (Voter S1-S5): Roll = 202603", fontSize = 12.sp, color = SlateWhite)
-                    Text("• Diana Prince (Manager / S1-S5 + Admin): Roll = 202604, Pass = adminSecure!", fontSize = 12.sp, color = SlateWhite)
-                }
-            }
-        }
     }
 }

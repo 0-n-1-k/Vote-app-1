@@ -9,13 +9,16 @@ object JwtHelper {
     private const val HEADER = "{\"alg\":\"HS256\",\"typ\":\"JWT\"}"
 
     // Generate JWT token for user roll
-    fun createToken(roll: String, isManagement: Boolean, expirySeconds: Long, secret: String): String {
+    fun createToken(roll: String, isManagement: Boolean, expirySeconds: Long, electionId: Long?, secret: String): String {
         try {
             val headerBase64 = base64UrlEncode(HEADER.toByteArray(Charsets.UTF_8))
             val payload = JSONObject().apply {
                 put("roll", roll)
                 put("is_management", isManagement)
                 put("exp", expirySeconds)
+                if (electionId != null) {
+                    put("election_id", electionId)
+                }
             }.toString()
             val payloadBase64 = base64UrlEncode(payload.toByteArray(Charsets.UTF_8))
             val dataToSign = "$headerBase64.$payloadBase64"
@@ -54,7 +57,8 @@ object JwtHelper {
 
             val roll = json.optString("roll", "")
             val isManagement = json.optBoolean("is_management", false)
-            return Claims(roll, isManagement, exp)
+            val electionId = if (json.has("election_id")) json.getLong("election_id") else null
+            return Claims(roll, isManagement, exp, electionId)
         } catch (e: Exception) {
             return null
         }
@@ -79,6 +83,7 @@ object JwtHelper {
     data class Claims(
         val roll: String,
         val isManagement: Boolean,
-        val exp: Long
+        val exp: Long,
+        val electionId: Long?
     )
 }

@@ -385,3 +385,101 @@ tr:hover {
   padding: 2rem;
   text-align: center;
 }
+
+/* Election Selection Grid */
+.election-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 1.5rem;
+  margin-top: 1.5rem;
+}
+
+.election-card {
+  background-color: rgba(255, 255, 255, 0.02);
+  border: 1px solid var(--surface-border);
+  padding: 1.5rem;
+  border-radius: 12px;
+  cursor: pointer;
+  transition: transform 0.2s, border-color 0.2s;
+  display: flex;
+  flex-direction: column;
+}
+
+.election-card:hover {
+  transform: translateY(-2px);
+  border-color: var(--primary-color);
+  background-color: rgba(255, 255, 255, 0.04);
+}
+
+.election-card h3 {
+  font-size: 1.3rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+  color: var(--text-primary);
+}
+
+.election-card .meta {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  margin-bottom: 1rem;
+}
+
+.election-card .badge-group {
+  display: flex;
+  gap: 0.5rem;
+  margin-top: auto;
+}
+
+.election-card .badge {
+  padding: 0.25rem 0.75rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: 700;
+}
+
+.election-card .badge.open {
+  background-color: rgba(16, 185, 129, 0.1);
+  color: var(--success-color);
+}
+
+.election-card .badge.closed {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: var(--text-error);
+}
+
+/* Mobile-first Media Query overrides for general elements */
+@media (max-width: 768px) {
+  body {
+    padding: 0.75rem 0.5rem;
+    display: block;
+    min-height: auto;
+  }
+  .spa-screen {
+    padding: 1.25rem 1rem;
+    border-radius: 8px;
+  }
+  h1 {
+    font-size: 1.5rem;
+  }
+  .subtitle {
+    font-size: 0.9rem;
+    margin-bottom: 1.5rem;
+  }
+  .btn {
+    padding: 0.75rem 1.25rem;
+    font-size: 0.95rem;
+  }
+  input[type="text"], input[type="password"] {
+    padding: 0.75rem 0.85rem;
+    font-size: 0.95rem;
+    margin-bottom: 1.25rem;
+  }
+  .preview-frame {
+    grid-template-columns: 1fr;
+    gap: 0.75rem;
+  }
+  .radio-group {
+    flex-direction: column;
+    gap: 0.5rem;
+  }
+}

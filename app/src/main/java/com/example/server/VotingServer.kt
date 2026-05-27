@@ -13,7 +13,11 @@ import com.example.db.ConfirmNonceEntity
 import com.example.db.VoteEntity
 import com.example.db.VotedRollEntity
 import com.example.db.VoterEntity
-import com.example.security.BCrypt
+import com.example.db.ElectionEntity
+import com.example.db.DbDesignStats
+import com.example.db.VotingOptionEntity
+import com.example.db.DatabaseSeeder
+import org.mindrot.jbcrypt.BCrypt
 import androidx.room.withTransaction
 import com.example.security.JwtHelper
 import kotlinx.coroutines.CoroutineScope
@@ -47,6 +51,10 @@ object VotingServer {
     private val _serverPortFlow = MutableStateFlow(3000)
     val serverPortFlow = _serverPortFlow.asStateFlow()
 
+    // Server readiness flow
+    private val _serverReadyFlow = MutableStateFlow(false)
+    val serverReadyFlow = _serverReadyFlow.asStateFlow()
+
     // Host configurations parsed from assets .env
     var port = 3000
     var jwtSecret = "super_secure_unpredictable_secret_key_64_characters_long"
@@ -64,6 +72,13 @@ object VotingServer {
             if (list.size > 200) list.removeAt(0)
             _logsFlow.value = list
         }
+    }
+
+    fun clearLogs() {
+        synchronized(_logsFlow) {
+            _logsFlow.value = emptyList()
+        }
+        addLog("SYSTEM TRANSACTION LOGGER: Session logs purged by operator.")
     }
 
     class RateLimitTracker {
@@ -108,6 +123,7 @@ object VotingServer {
                     server = candidateServer
                     port = currentPort
                     _serverPortFlow.value = currentPort
+                    _serverReadyFlow.value = true
                     boundSuccessfully = true
                     addLog("Server successfully started on port $port")
                     addLog("Trust Proxy headers enabled. WAL Database journal is active.")
@@ -125,6 +141,7 @@ object VotingServer {
     fun stop() {
         server?.stop(0)
         server = null
+        _serverReadyFlow.value = false
         addLog("Server stopped.")
     }
 
@@ -207,6 +224,10 @@ object VotingServer {
                     if (method == "GET") handleStatus(exchange)
                     else sendResponse(exchange, 405, "{\"error\":\"Method Not Allowed\"}")
                 }
+                "/api/elections" -> {
+                    if (method == "GET") handleElectionsList(exchange)
+                    else sendResponse(exchange, 405, "{\"error\":\"Method Not Allowed\"}")
+                }
                 "/auth/verify" -> {
                     if (method == "POST") {
                         if (!checkRateLimit(ip, "/auth/verify", 20)) {
@@ -268,6 +289,34 @@ object VotingServer {
                     if (method == "GET") handleAdminResults(exchange)
                     else sendResponse(exchange, 405, "{\"error\":\"Method Not Allowed\"}")
                 }
+                "/admin/elections/create" -> {
+                    if (method == "POST") handleAdminCreateElection(exchange)
+                    else sendResponse(exchange, 405, "{\"error\":\"Method Not Allowed\"}")
+                }
+                "/admin/elections/delete" -> {
+                    if (method == "POST") handleAdminDeleteElection(exchange)
+                    else sendResponse(exchange, 405, "{\"error\":\"Method Not Allowed\"}")
+                }
+                "/admin/elections/adjust-time" -> {
+                    if (method == "POST") handleAdminAdjustTime(exchange)
+                    else sendResponse(exchange, 405, "{\"error\":\"Method Not Allowed\"}")
+                }
+                "/api/elections/options" -> {
+                    if (method == "GET") handleGetElectionsOptions(exchange)
+                    else sendResponse(exchange, 405, "{\"error\":\"Method Not Allowed\"}")
+                }
+                "/admin/elections/options" -> {
+                    if (method == "POST") handlePostElectionsOptions(exchange)
+                    else sendResponse(exchange, 405, "{\"error\":\"Method Not Allowed\"}")
+                }
+                "/admin/elections/options/delete" -> {
+                    if (method == "POST") handleDeleteElectionOption(exchange)
+                    else sendResponse(exchange, 405, "{\"error\":\"Method Not Allowed\"}")
+                }
+                "/admin/reseed" -> {
+                    if (method == "POST") handleAdminReseed(exchange)
+                    else sendResponse(exchange, 405, "{\"error\":\"Method Not Allowed\"}")
+                }
                 else -> {
                     sendResponse(exchange, 404, "{\"error\":\"Not Found\"}")
                 }
@@ -323,45 +372,38 @@ object VotingServer {
             return JwtHelper.verifyToken(token, jwtSecret)
         }
 
-        private fun getVotingWindowSettings(): Pair<Boolean, Long> = runBlocking {
-            val configDao = db.configDao()
-            val savedOpen = configDao.getConfigValue("voting_open") ?: "1"
-            val startTimeStr = configDao.getConfigValue("voting_start_time") ?: "2026-05-01 00:00:00"
-            val endTimeStr = configDao.getConfigValue("voting_end_time") ?: "2026-08-01 14:00:00"
-            
-            // Format difference to remaining seconds
+        private fun getElectionWindowSettings(electionId: Long): Pair<Boolean, Long> = runBlocking {
+            val election = db.electionDao().getElectionById(electionId) ?: return@runBlocking Pair(false, 0L)
             val nowSeconds = Instant.now().epochSecond
-            
-            // Database clock conditions must use absolute UTC modifiers:
-            // We parse the formatted date "YYYY-MM-DD HH:MM:SS" into epoch seconds assuming UTC
-            val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-                .withZone(java.time.ZoneOffset.UTC)
-            
-            val startEpochSeconds = try {
-                val instant = java.time.Instant.from(formatter.parse(startTimeStr))
-                instant.epochSecond
-            } catch (e: Exception) {
-                0L
-            }
-
-            val endEpochSeconds = try {
-                val instant = java.time.Instant.from(formatter.parse(endTimeStr))
-                instant.epochSecond
-            } catch (e: Exception) {
-                Instant.now().epochSecond + 7200
-            }
-
-            val isTimeOpen = nowSeconds >= startEpochSeconds && nowSeconds < endEpochSeconds
-            val finalOpenStatus = (savedOpen == "1" && isTimeOpen)
-            val remaining = maxOf(0L, endEpochSeconds - nowSeconds)
-
-            // If time is closed because of cutoff limit expiration, automatically update 'config' database state
-            if (nowSeconds >= endEpochSeconds && savedOpen == "1") {
-                db.configDao().insertConfig(ConfigEntity("voting_open", "0"))
-                addLog("TEMPORAL SYSTEM AUTO-RESOLVE: Closed window inside SQL update loop due to end cutoff limit match.")
-            }
-
+            val remaining = maxOf(0L, election.endsAt - nowSeconds)
+            val finalOpenStatus = remaining > 0
             Pair(finalOpenStatus, remaining)
+        }
+
+        private fun handleElectionsList(exchange: HttpExchange) = runBlocking {
+            try {
+                val elections = db.electionDao().getAllElections()
+                val nowSeconds = Instant.now().epochSecond
+                val jsonArr = JSONArray()
+                for (el in elections) {
+                    val remaining = maxOf(0L, el.endsAt - nowSeconds)
+                    val item = JSONObject().apply {
+                        put("id", el.id)
+                        put("title", el.title)
+                        put("ends_at", el.endsAt)
+                        put("created_at", el.createdAt)
+                        put("time_remaining_seconds", remaining)
+                        put("voting_open", remaining > 0)
+                        
+                        val voteCount = db.votedRollDao().getVotedRollsCount(el.id)
+                        put("voted_count", voteCount)
+                    }
+                    jsonArr.put(item)
+                }
+                sendResponse(exchange, 200, jsonArr.toString())
+            } catch (e: Exception) {
+                sendResponse(exchange, 500, "{\"error\": \"Internal server error\"}")
+            }
         }
 
         // POST /auth/verify -> {name, is_management, confirm_nonce}
@@ -370,11 +412,23 @@ object VotingServer {
                 val body = readBody(exchange)
                 val json = JSONObject(body)
                 val roll = json.optString("roll", "").trim()
+                val electionId = json.optLong("election_id", -1L)
 
                 // 1. Sanitization validation
                 if (roll.isEmpty() || !rollPattern.matches(roll) || roll.length > 30) {
                     addLog("INPUT SANITIZATION DENIED: Alphanumeric mismatch pattern for roll '$roll'")
                     sendResponse(exchange, 400, "{\"error\": \"Valid alphanumeric roll ID required\"}")
+                    return@runBlocking
+                }
+
+                if (electionId == -1L) {
+                    sendResponse(exchange, 400, "{\"error\": \"Valid election selection required\"}")
+                    return@runBlocking
+                }
+
+                val election = db.electionDao().getElectionById(electionId)
+                if (election == null) {
+                    sendResponse(exchange, 404, "{\"error\": \"Selected election not found in database\"}")
                     return@runBlocking
                 }
 
@@ -394,18 +448,18 @@ object VotingServer {
                 }
 
                 // 4. Scan voted_rolls
-                val alreadyVoted = db.votedRollDao().getVotedRoll(roll)
+                val alreadyVoted = db.votedRollDao().getVotedRoll(roll, electionId)
                 if (alreadyVoted != null) {
-                     addLog("DUPLICATE SIGNATURE ARRESTED: Roll signature has already voted: $roll")
-                     sendResponse(exchange, 409, "{\"error\": \"Roll signature has already voted\"}")
+                     addLog("DUPLICATE SIGNATURE ARRESTED: Roll signature has already voted in election $electionId: $roll")
+                     sendResponse(exchange, 409, "{\"error\": \"You have already voted in this election\"}")
                      return@runBlocking
                 }
 
                 // 5. Query temporal conditions
-                val (isOpen, _) = getVotingWindowSettings()
+                val (isOpen, _) = getElectionWindowSettings(electionId)
                 if (!isOpen) {
                     addLog("TEMPORAL RESTRICTION ENFORCED: Roll verification rejected. Voting matches closed criteria.")
-                    sendResponse(exchange, 403, "{\"error\": \"Voting window has closed\"}")
+                    sendResponse(exchange, 403, "{\"error\": \"Voting window has closed for this election\"}")
                     return@runBlocking
                 }
 
@@ -417,6 +471,7 @@ object VotingServer {
                     ConfirmNonceEntity(
                         nonce = secureNonce,
                         roll = roll,
+                        electionId = electionId,
                         createdAt = currentTimeSec,
                         expiresAt = currentTimeSec + 300 // Absolute 5-minute lifecycle limits
                     )
@@ -458,11 +513,13 @@ object VotingServer {
                     return@runBlocking
                 }
 
+                val electionId = nonceRecord.electionId
+
                 // 2. Clear token from database immediately to guarantee single-use boundaries
                 db.confirmNonceDao().deleteConfirmNonce(nonce)
 
                 // 3. Validate database time boundaries
-                val (isOpen, _) = getVotingWindowSettings()
+                val (isOpen, _) = getElectionWindowSettings(electionId)
                 if (!isOpen) {
                     addLog("TEMPORAL CONFIRM DENIED: Voting window closed prior to confirmation.")
                     sendResponse(exchange, 403, "{\"error\": \"Voting window has closed\"}")
@@ -470,29 +527,21 @@ object VotingServer {
                 }
 
                 // 4. TOCTOU check against voted_rolls
-                val alreadyVoted = db.votedRollDao().getVotedRoll(nonceRecord.roll)
+                val alreadyVoted = db.votedRollDao().getVotedRoll(nonceRecord.roll, electionId)
                 if (alreadyVoted != null) {
-                    sendResponse(exchange, 409, "{\"error\": \"Roll signature has already voted\"}")
+                    sendResponse(exchange, 409, "{\"error\": \"You have already voted in this election\"}")
                     return@runBlocking
                 }
 
                 // Retrieve voter info
                 val voter = db.voterDao().getVoter(nonceRecord.roll) ?: VoterEntity(nonceRecord.roll, "Anonymous", 0)
 
-                // 5. Generate and sign a cookie-wrapped JWT holding {roll, is_management}
-                // Expiration precisely to match voting_end_time + 30 minutes
-                val endTimeStr = db.configDao().getConfigValue("voting_end_time") ?: "2026-08-01 14:00:00"
-                val formatter = java.time.format.DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm:ss")
-                    .withZone(java.time.ZoneOffset.UTC)
-                val endEpochSeconds = try {
-                    java.time.Instant.from(formatter.parse(endTimeStr)).epochSecond
-                } catch (e: Exception) {
-                    currentTimeSec + 7200
-                }
-                val jwtExpiryTime = endEpochSeconds + 1800 // voting_end_time + 30 minutes
-                val maxAgeSeconds = maxOf(0L, jwtExpiryTime - currentTimeSec)
+                // 5. Generate and sign a cookie-wrapped JWT holding {roll, is_management, election_id}
+                val election = db.electionDao().getElectionById(electionId)
+                val expiryTime = election?.endsAt ?: (currentTimeSec + 7200)
+                val maxAgeSeconds = maxOf(0L, expiryTime - currentTimeSec)
 
-                val token = JwtHelper.createToken(voter.roll, voter.isManagement == 1, jwtExpiryTime, jwtSecret)
+                val token = JwtHelper.createToken(voter.roll, voter.isManagement == 1, expiryTime, electionId, jwtSecret)
 
                 addLog("CONFIRM SUCCESS: Issued JWT authentication token for ${voter.name} (${voter.roll})")
 
@@ -549,7 +598,7 @@ object VotingServer {
                 // Issue admin JWT
                 val currentTimeSec = System.currentTimeMillis() / 1000
                 val jwtExpiryTime = currentTimeSec + 7200 // 2-hour admin access limits
-                val token = JwtHelper.createToken(roll, true, jwtExpiryTime, jwtSecret)
+                val token = JwtHelper.createToken(roll, true, jwtExpiryTime, null, jwtSecret)
 
                 exchange.responseHeaders.add(
                     "Set-Cookie",
@@ -576,12 +625,21 @@ object VotingServer {
                     return@runBlocking
                 }
 
+                val electionId = claims.electionId
+                if (electionId == null) {
+                    sendResponse(exchange, 400, "{\"error\": \"Invalid session: matching election not identified\"}")
+                    return@runBlocking
+                }
+
                 val body = readBody(exchange)
                 val json = JSONObject(body)
                 val votesArray = json.optJSONArray("votes")
 
-                if (votesArray == null || votesArray.length() != 5) {
-                    sendResponse(exchange, 400, "{\"error\": \"Invalid layout counts. Must specify exactly 5 designs\"}")
+                val customOptions = db.votingOptionDao().getOptionsForElection(electionId)
+                val requiredCount = if (customOptions.isEmpty()) 5 else customOptions.size
+
+                if (votesArray == null || votesArray.length() != requiredCount) {
+                    sendResponse(exchange, 400, "{\"error\": \"Invalid layout counts. Must specify exactly $requiredCount designs\"}")
                     return@runBlocking
                 }
 
@@ -589,19 +647,19 @@ object VotingServer {
 
                 // Validate votes format
                 val votesList = mutableListOf<VoteEntity>()
-                for (i in 0 until 5) {
+                for (i in 0 until requiredCount) {
                     val vObj = votesArray.getJSONObject(i)
                     val designId = vObj.getInt("design_id")
                     val choice = vObj.getString("choice")
-                    if (designId !in 1..5 || (choice != "yes" && choice != "no")) {
+                    if (designId !in 1..requiredCount || (choice != "yes" && choice != "no")) {
                         sendResponse(exchange, 400, "{\"error\": \"Invalid layout constraints on design choices\"}")
                         return@runBlocking
                     }
-                    votesList.add(VoteEntity(id = 0, roll = claims.roll, designId = designId, choice = choice, submittedAt = nowSeconds))
+                    votesList.add(VoteEntity(id = 0, roll = claims.roll, electionId = electionId, designId = designId, choice = choice, submittedAt = nowSeconds))
                 }
 
                 // Check temporal ceiling limits
-                val (isOpen, _) = getVotingWindowSettings()
+                val (isOpen, _) = getElectionWindowSettings(electionId)
                 if (!isOpen) {
                     sendResponse(exchange, 403, "{\"error\": \"Voting window has closed\"}")
                     return@runBlocking
@@ -612,14 +670,14 @@ object VotingServer {
                 try {
                     db.withTransaction {
                         // 1. Verify TOCTOU double-vote check again inside isolated block
-                        val exists = db.votedRollDao().getVotedRoll(claims.roll)
+                        val exists = db.votedRollDao().getVotedRoll(claims.roll, electionId)
                         if (exists != null) {
                             stateConflict = true
                             throw IllegalStateException("ALREADY_VOTED")
                         }
 
                         // 2. Insert Safety Log Block locks boundary immediately
-                        db.votedRollDao().insertVotedRoll(VotedRollEntity(claims.roll, nowSeconds))
+                        db.votedRollDao().insertVotedRoll(VotedRollEntity(claims.roll, electionId, nowSeconds))
 
                         // 3. Write individual votes data
                         for (v in votesList) {
@@ -636,11 +694,11 @@ object VotingServer {
 
                 if (stateConflict) {
                     addLog("TRANSACTION ABORTED: Roll ${claims.roll} double voting attempt blocked.")
-                    sendResponse(exchange, 409, "{\"error\": \"Vote already tracked for this roll\"}")
+                    sendResponse(exchange, 409, "{\"error\": \"Vote already tracked for this roll in this election\"}")
                     return@runBlocking
                 }
 
-                addLog("TRANSACTION SUCCESS: Voter ${claims.roll} submitted 5 layout cards successfully!")
+                addLog("TRANSACTION SUCCESS: Voter ${claims.roll} submitted 5 layout cards successfully for election $electionId!")
 
                 // Kill session cookie immediately on successful submission
                 exchange.responseHeaders.add(
@@ -656,8 +714,22 @@ object VotingServer {
         }
 
         // GET /status
-        private fun handleStatus(exchange: HttpExchange) {
-            val (isOpen, remaining) = getVotingWindowSettings()
+        private fun handleStatus(exchange: HttpExchange) = runBlocking {
+            val query = exchange.requestURI.query ?: ""
+            val electionId = query.split("&")
+                .firstOrNull { it.startsWith("election_id=") }
+                ?.substringAfter("election_id=")?.toLongOrNull() ?: db.electionDao().getAllElections().firstOrNull()?.id ?: -1L
+
+            if (electionId == -1L) {
+                val json = JSONObject().apply {
+                    put("voting_open", false)
+                    put("time_remaining_seconds", 0)
+                }
+                sendResponse(exchange, 200, json.toString())
+                return@runBlocking
+            }
+
+            val (isOpen, remaining) = getElectionWindowSettings(electionId)
             val json = JSONObject().apply {
                 put("voting_open", isOpen)
                 put("time_remaining_seconds", remaining)
@@ -673,11 +745,22 @@ object VotingServer {
                 return@runBlocking
             }
 
-            val (isOpen, remaining) = getVotingWindowSettings()
+            val query = exchange.requestURI.query ?: ""
+            val electionId = query.split("&")
+                .firstOrNull { it.startsWith("election_id=") }
+                ?.substringAfter("election_id=")?.toLongOrNull() ?: db.electionDao().getAllElections().firstOrNull()?.id ?: -1L
+
+            val election = db.electionDao().getElectionById(electionId)
             val totalVotersCount = db.voterDao().getVotersCount()
-            val votedCount = db.votedRollDao().getVotedRollsCount()
+            val votedCount = if (electionId != -1L) db.votedRollDao().getVotedRollsCount(electionId) else 0
+
+            val nowSeconds = java.time.Instant.now().epochSecond
+            val remaining = if (election != null) maxOf(0L, election.endsAt - nowSeconds) else 0L
+            val isOpen = remaining > 0
 
             val json = JSONObject().apply {
+                put("election_id", electionId)
+                put("election_title", election?.title ?: "No Active Election")
                 put("voting_open", isOpen)
                 put("time_remaining_seconds", remaining)
                 put("total_voters", totalVotersCount)
@@ -699,11 +782,15 @@ object VotingServer {
                 .firstOrNull { it.startsWith("page=") }
                 ?.substringAfter("page=")?.toIntOrNull() ?: 1
 
+            val electionId = query.split("&")
+                .firstOrNull { it.startsWith("election_id=") }
+                ?.substringAfter("election_id=")?.toLongOrNull() ?: db.electionDao().getAllElections().firstOrNull()?.id ?: -1L
+
             val pageSize = 50
             val offset = (pageVal - 1) * pageSize
 
-            val votedRolls = db.votedRollDao().getVotedRollsPaginated(pageSize, offset)
-            val totalCount = db.votedRollDao().getVotedRollsCount()
+            val votedRolls = if (electionId != -1L) db.votedRollDao().getVotedRollsPaginated(electionId, pageSize, offset) else emptyList()
+            val totalCount = if (electionId != -1L) db.votedRollDao().getVotedRollsCount(electionId) else 0
 
             val dataArray = JSONArray().apply {
                 for (r in votedRolls) {
@@ -723,6 +810,26 @@ object VotingServer {
             sendResponse(exchange, 200, json.toString())
         }
 
+        private suspend fun getElectionStatsProgrammatic(electionId: Long): List<DbDesignStats> {
+            if (electionId == -1L) return emptyList()
+            val customOptions = db.votingOptionDao().getOptionsForElection(electionId)
+            if (customOptions.isEmpty()) {
+                return db.voteDao().getVoteStats(electionId)
+            }
+            val votes = db.voteDao().getVotesForElection(electionId)
+            return customOptions.mapIndexed { index, option ->
+                val designId = index + 1
+                val yesVotes = votes.count { it.designId == designId && it.choice == "yes" }
+                val noVotes = votes.count { it.designId == designId && it.choice == "no" }
+                DbDesignStats(
+                    design_id = designId,
+                    yes_votes = yesVotes,
+                    no_votes = noVotes,
+                    total_votes = yesVotes + noVotes
+                )
+            }
+        }
+
         // GET /admin/vote-stats
         private fun handleAdminVoteStats(exchange: HttpExchange) = runBlocking {
             val claims = verifyUser(exchange)
@@ -731,7 +838,12 @@ object VotingServer {
                 return@runBlocking
             }
 
-            val stats = db.voteDao().getVoteStats()
+            val query = exchange.requestURI.query ?: ""
+            val electionId = query.split("&")
+                .firstOrNull { it.startsWith("election_id=") }
+                ?.substringAfter("election_id=")?.toLongOrNull() ?: db.electionDao().getAllElections().firstOrNull()?.id ?: -1L
+
+            val stats = getElectionStatsProgrammatic(electionId)
             val statsArray = JSONArray().apply {
                 for (s in stats) {
                     put(JSONObject().apply {
@@ -757,7 +869,16 @@ object VotingServer {
                 return@runBlocking
             }
 
-            val (_, remaining) = getVotingWindowSettings()
+            val query = exchange.requestURI.query ?: ""
+            val electionId = query.split("&")
+                .firstOrNull { it.startsWith("election_id=") }
+                ?.substringAfter("election_id=")?.toLongOrNull() ?: db.electionDao().getAllElections().firstOrNull()?.id ?: -1L
+
+            val remaining = if (electionId != -1L) {
+                val election = db.electionDao().getElectionById(electionId)
+                if (election != null) maxOf(0L, election.endsAt - java.time.Instant.now().epochSecond) else 0L
+            } else 0L
+
             if (remaining > 0) {
                 // If requested prior to termination bounds, return 403 with descriptive error
                 sendResponse(exchange, 403, "{\"error\": \"Results not yet available\"}")
@@ -767,7 +888,7 @@ object VotingServer {
             // Calculations panel compiled based on:
             // score = yes_votes - no_votes descending
             // handling ties with ascending design_id secondary lookup
-            val stats = db.voteDao().getVoteStats()
+            val stats = getElectionStatsProgrammatic(electionId)
 
             val ranked = stats.map { s ->
                 val score = s.yes_votes - s.no_votes
@@ -790,6 +911,109 @@ object VotingServer {
             }
 
             sendResponse(exchange, 200, resultsArray.toString())
+        }
+
+        // POST /admin/elections/create
+        private fun handleAdminCreateElection(exchange: HttpExchange) = runBlocking {
+            val claims = verifyUser(exchange)
+            if (claims == null || !claims.isManagement) {
+                sendResponse(exchange, 403, "{\"error\": \"Access denied\"}")
+                return@runBlocking
+            }
+
+            try {
+                val body = readBody(exchange)
+                val json = JSONObject(body)
+                val title = json.optString("title", "").trim()
+                val durationSeconds = json.optLong("duration_seconds", 0L)
+
+                if (title.isEmpty() || durationSeconds <= 0L) {
+                    sendResponse(exchange, 400, "{\"error\": \"Invalid title or duration\"}")
+                    return@runBlocking
+                }
+
+                val nowSeconds = java.time.Instant.now().epochSecond
+                val endsAt = nowSeconds + durationSeconds
+
+                val newElectionId = db.electionDao().insertElection(
+                    ElectionEntity(
+                        title = title,
+                        endsAt = endsAt,
+                        createdAt = nowSeconds
+                    )
+                )
+
+                addLog("ADMIN EVENT: Created new election '$title' with ID $newElectionId, ends in $durationSeconds seconds")
+                sendResponse(exchange, 200, "{\"ok\": true, \"id\": $newElectionId}")
+            } catch (e: Exception) {
+                sendResponse(exchange, 500, "{\"error\": \"Failed to create election: ${e.message}\"}")
+            }
+        }
+
+        // POST /admin/elections/adjust-time
+        private fun handleAdminAdjustTime(exchange: HttpExchange) = runBlocking {
+            val claims = verifyUser(exchange)
+            if (claims == null || !claims.isManagement) {
+                sendResponse(exchange, 403, "{\"error\": \"Access denied\"}")
+                return@runBlocking
+            }
+
+            try {
+                val body = readBody(exchange)
+                val json = JSONObject(body)
+                val electionId = json.optLong("election_id", -1L)
+                val deltaSeconds = json.optLong("delta_seconds", 0L)
+
+                if (electionId == -1L || deltaSeconds == 0L) {
+                    sendResponse(exchange, 400, "{\"error\": \"Invalid parameters\"}")
+                    return@runBlocking
+                }
+
+                val election = db.electionDao().getElectionById(electionId)
+                if (election == null) {
+                    sendResponse(exchange, 404, "{\"error\": \"Election not found\"}")
+                    return@runBlocking
+                }
+
+                val nowSeconds = java.time.Instant.now().epochSecond
+                val currentRemaining = election.endsAt - nowSeconds
+                val baseTime = if (currentRemaining > 0) election.endsAt else nowSeconds
+                election.endsAt = maxOf(nowSeconds, baseTime + deltaSeconds)
+
+                db.electionDao().updateElection(election)
+
+                addLog("ADMIN EVENT: Adjusted remaining time of election ID $electionId by $deltaSeconds seconds")
+                sendResponse(exchange, 200, "{\"ok\": true, \"new_ends_at\": ${election.endsAt}}")
+            } catch (e: Exception) {
+                sendResponse(exchange, 500, "{\"error\": \"Failed to adjust election time: ${e.message}\"}")
+            }
+        }
+
+        // POST /admin/reseed
+        private fun handleAdminReseed(exchange: HttpExchange) = runBlocking {
+            val claims = verifyUser(exchange)
+            if (claims == null || !claims.isManagement) {
+                sendResponse(exchange, 403, "{\"error\": \"Access denied\"}")
+                return@runBlocking
+            }
+
+            try {
+                db.withTransaction {
+                    db.voteDao().deleteAllVotes()
+                    db.votedRollDao().deleteAllVotedRolls()
+                }
+                
+                // Idempotently reload default csv files
+                val success = DatabaseSeeder.seedDatabase(context, db, "2026-08-01 14:00:00")
+                if (success) {
+                    addLog("ADMIN EVENT: Database was successfully reseeded! Votes and voted rolls cleared, default registry reloaded.")
+                    sendResponse(exchange, 200, "{\"ok\": true, \"message\": \"Database successfully reseeded.\"}")
+                } else {
+                    sendResponse(exchange, 500, "{\"error\": \"Idempotent seeding failed\"}")
+                }
+            } catch (e: Exception) {
+                sendResponse(exchange, 500, "{\"error\": \"Reseed exception: ${e.message}\"}")
+            }
         }
 
         private data class RankedResult(
@@ -900,6 +1124,126 @@ object VotingServer {
                         sendResponse(exchange, 404, "{\"error\": \"Design load failed\"}")
                     } catch (ignored: Exception) {}
                 }
+            }
+        }
+
+        // GET /api/elections/options
+        private fun handleGetElectionsOptions(exchange: HttpExchange) = runBlocking {
+            try {
+                val query = exchange.requestURI.query ?: ""
+                val electionId = query.split("&")
+                    .firstOrNull { it.startsWith("election_id=") }
+                    ?.substringAfter("election_id=")?.toLongOrNull()
+
+                if (electionId == null) {
+                    sendResponse(exchange, 400, "{\"error\": \"election_id required\"}")
+                    return@runBlocking
+                }
+
+                val options = db.votingOptionDao().getOptionsForElection(electionId)
+                val array = JSONArray().apply {
+                    for (opt in options) {
+                        put(JSONObject().apply {
+                            put("id", opt.id)
+                            put("election_id", opt.electionId)
+                            put("option_text", opt.optionText)
+                            put("image_data", opt.imageData)
+                        })
+                    }
+                }
+                sendResponse(exchange, 200, array.toString())
+            } catch (e: Exception) {
+                sendResponse(exchange, 500, "{\"error\": \"${e.message}\"}")
+            }
+        }
+
+        // POST /admin/elections/options
+        private fun handlePostElectionsOptions(exchange: HttpExchange) = runBlocking {
+            val claims = verifyUser(exchange)
+            if (claims == null || !claims.isManagement) {
+                sendResponse(exchange, 403, "{\"error\": \"Access denied\"}")
+                return@runBlocking
+            }
+
+            try {
+                val body = readBody(exchange)
+                val json = JSONObject(body)
+                val electionId = json.getLong("election_id")
+                val optionText = json.getString("option_text").trim()
+                val imageData = json.getString("image_data")
+
+                if (optionText.isEmpty()) {
+                    sendResponse(exchange, 400, "{\"error\": \"Option text cannot be empty\"}")
+                    return@runBlocking
+                }
+
+                val optionId = db.votingOptionDao().insertVotingOption(
+                    VotingOptionEntity(
+                        electionId = electionId,
+                        optionText = optionText,
+                        imageData = imageData
+                    )
+                )
+
+                sendResponse(exchange, 200, "{\"ok\": true, \"id\": $optionId}")
+            } catch (e: Exception) {
+                sendResponse(exchange, 500, "{\"error\": \"Failed to add option: ${e.message}\"}")
+            }
+        }
+
+        // POST /admin/elections/options/delete
+        private fun handleDeleteElectionOption(exchange: HttpExchange) = runBlocking {
+            val claims = verifyUser(exchange)
+            if (claims == null || !claims.isManagement) {
+                sendResponse(exchange, 403, "{\"error\": \"Access denied\"}")
+                return@runBlocking
+            }
+
+            try {
+                val body = readBody(exchange)
+                val json = JSONObject(body)
+                val optionId = json.getLong("id")
+
+                db.votingOptionDao().deleteOptionById(optionId)
+                sendResponse(exchange, 200, "{\"ok\": true}")
+            } catch (e: Exception) {
+                sendResponse(exchange, 500, "{\"error\": \"Failed to delete option: ${e.message}\"}")
+            }
+        }
+
+        // POST /admin/elections/delete
+        private fun handleAdminDeleteElection(exchange: HttpExchange) = runBlocking {
+            val claims = verifyUser(exchange)
+            if (claims == null || !claims.isManagement) {
+                sendResponse(exchange, 403, "{\"error\": \"Access denied\"}")
+                return@runBlocking
+            }
+
+            try {
+                val body = readBody(exchange)
+                val json = JSONObject(body)
+                val electionId = json.getLong("election_id")
+                val password = json.getString("password")
+
+                val roll = claims.roll
+                val adminAuth = db.managementAuthDao().getManagementAuth(roll)
+                if (adminAuth == null) {
+                    sendResponse(exchange, 401, "{\"error\": \"Invalid administration credentials\"}")
+                    return@runBlocking
+                }
+
+                val matched = BCrypt.checkpw(password, adminAuth.passwordHash)
+                if (!matched) {
+                    sendResponse(exchange, 401, "{\"error\": \"Passcode authorization failed\"}")
+                    return@runBlocking
+                }
+
+                db.electionDao().deleteElection(electionId)
+
+                addLog("ADMIN EVENT: Admin $roll deleted election ID $electionId")
+                sendResponse(exchange, 200, "{\"ok\": true}")
+            } catch (e: Exception) {
+                sendResponse(exchange, 500, "{\"error\": \"Failed to delete election: ${e.message}\"}")
             }
         }
     }

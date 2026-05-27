@@ -31,6 +31,57 @@
       margin-bottom: 1rem;
       color: var(--primary-color);
     }
+    .admin-main-grid {
+      display: grid;
+      grid-template-columns: 2fr 1.2fr;
+      gap: 2.5rem;
+      margin-top: 1rem;
+    }
+
+    /* Mobile media queries to prevent overflow/clipping of elements */
+    @media (max-width: 768px) {
+      body {
+        padding: 1rem 0.5rem;
+        display: block !important;
+        min-height: auto !important;
+      }
+      .admin-card {
+        padding: 1.25rem 1rem;
+        border-radius: 8px;
+      }
+      .admin-header {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 1rem;
+      }
+      .admin-header button {
+        margin-top: 0.5rem;
+      }
+      .admin-main-grid {
+        grid-template-columns: 1fr;
+        gap: 1.5rem;
+      }
+      .panel-section {
+        padding-top: 1.5rem;
+        margin-top: 1.5rem;
+      }
+      .section-title {
+        font-size: 1.2rem;
+      }
+      h1 {
+        font-size: 1.6rem;
+      }
+      .dashboard-grid {
+        grid-template-columns: 1fr;
+        gap: 1rem;
+      }
+      .stat-card {
+        padding: 1rem;
+      }
+      .stat-card .value {
+        font-size: 1.6rem;
+      }
+    }
   </style>
 </head>
 <body>
@@ -56,11 +107,11 @@
   </div>
 
   <!-- Admin Dashboard Screen (Hidden initially) -->
-  <div id="admin_dashboard" class="admin-card" style="display: none;">
+  <div id="admin_dashboard" class="admin-card" style="display: none; max-width: 950px;">
     <div class="admin-header">
       <div>
         <h1>Database Control Console</h1>
-        <p class="subtitle" style="margin-bottom: 0;">Live SQLite metrics, WAL transaction logs, and results compilation.</p>
+        <p class="subtitle" style="margin-bottom: 0;">Live SQLite metrics, election management, and results compilation.</p>
       </div>
       <div>
         <button class="btn btn-secondary" onclick="handleLogout()" style="width: auto; margin-top: 0; padding: 0.5rem 1rem;">
@@ -69,106 +120,315 @@
       </div>
     </div>
 
-    <!-- Diagnostic Cards Grid -->
-    <div class="dashboard-grid">
-      <div class="stat-card">
-        <div style="color: var(--text-secondary); font-weight: 600;">System Window Status</div>
-        <div id="stat_v_open" class="value" style="color: var(--success-color);">LOADING</div>
-      </div>
-      <div class="stat-card">
-        <div style="color: var(--text-secondary); font-weight: 600;">Time Remaining Floor</div>
-        <div id="stat_seconds_left" class="value">0s</div>
-      </div>
-      <div class="stat-card">
-        <div style="color: var(--text-secondary); font-weight: 600;">Registered Registry profiles</div>
-        <div id="stat_total_voters" class="value">0</div>
-      </div>
-      <div class="stat-card">
-        <div style="color: var(--text-secondary); font-weight: 600;">Committed voter signatures</div>
-        <div id="stat_voted_count" class="value">0</div>
+    <div id="admin_alert_banner" class="alert-container" style="background-color: rgba(16, 185, 129, 0.1); border-color: var(--success-color); color: var(--success-color); display: none;"></div>
+    <div id="admin_error_banner" class="alert-container" aria-live="assertive"></div>
+
+    <!-- SUB-PANEL A: ELECTIONS LIST INDEX & ACTIONS -->
+    <div id="panel_elections_index">
+      <div class="admin-main-grid">
+        
+        <!-- Left Side: Ongoing & Historic Elections -->
+        <div>
+          <h2 class="section-title">Current Ongoing Votes</h2>
+          <p style="color: var(--text-secondary); margin-bottom: 1.5rem; font-size: 0.95rem;">Select any session to view real-time voter metrics, cast counts, rankings, and adjust timelines.</p>
+          <div id="admin_elections_list" class="election-grid">
+            <p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Loading ongoing votes...</p>
+          </div>
+        </div>
+
+        <!-- Right Side: Fast Admin Tools -->
+        <div>
+          <!-- Tool 1: Create New Vote -->
+          <div style="background-color: rgba(255,255,255,0.02); border: 1px solid var(--surface-border); padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem;">
+            <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 1rem; color: var(--primary-color);">Create New Vote</h3>
+            <form onsubmit="handleCreateElection(event)">
+              <label for="new_vote_title" style="font-size: 0.9rem;">Vote Title / Topic</label>
+              <input type="text" id="new_vote_title" placeholder="e.g. Design Proposal B" required autocomplete="off" style="margin-bottom: 1rem; padding: 0.6rem 0.8rem; font-size: 0.95rem;">
+
+              <label style="font-size: 0.9rem; display: block; margin-bottom: 0.25rem;">Time Limit (Duration)</label>
+              <div style="display: flex; gap: 0.5rem; margin-bottom: 1.5rem;">
+                <div style="flex: 1;">
+                  <label for="new_vote_hours" style="font-size: 0.8rem; color: var(--text-secondary);">Hours</label>
+                  <input type="number" id="new_vote_hours" min="0" value="1" style="width: 100%; margin-top: 0.25rem; padding: 0.6rem 0.8rem; font-size: 0.95rem; background-color: var(--bg-color); border: 1px solid var(--surface-border); border-radius: 8px; color: var(--text-primary);">
+                </div>
+                <div style="flex: 1;">
+                  <label for="new_vote_minutes" style="font-size: 0.8rem; color: var(--text-secondary);">Minutes</label>
+                  <input type="number" id="new_vote_minutes" min="0" max="59" value="0" style="width: 100%; margin-top: 0.25rem; padding: 0.6rem 0.8rem; font-size: 0.95rem; background-color: var(--bg-color); border: 1px solid var(--surface-border); border-radius: 8px; color: var(--text-primary);">
+                </div>
+              </div>
+
+              <button type="submit" class="btn btn-primary" id="btn_create_vote">
+                Launch Vote <div id="spinner_create" class="spinner"></div>
+              </button>
+            </form>
+          </div>
+
+          <!-- Tool 2: Database Registry Reseeding -->
+          <div style="background-color: rgba(239, 68, 68, 0.02); border: 1px solid rgba(239, 68, 68, 0.2); padding: 1.5rem; border-radius: 8px;">
+            <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--text-error);">Emergency Registry</h3>
+            <p style="color: var(--text-secondary); font-size: 0.85rem; line-height: 1.4; margin-bottom: 1.25rem;">Clears all ongoing votes, resets voted lists, and swaps database registers back to defaults to introduce new voters.</p>
+            <button class="btn" onclick="handleReseedDatabase()" style="background-color: rgba(239, 68, 68, 0.1); color: var(--text-error); border: 1px solid var(--text-error);" id="btn_reseed">
+              Reseed Voter Database <div id="spinner_reseed" class="spinner"></div>
+            </button>
+          </div>
+        </div>
+
       </div>
     </div>
 
-    <!-- Section 1: Paginated Voted Rolls -->
-    <div class="panel-section">
-      <h2 class="section-title">Committed Roll Signatures (Choices Omitted)</h2>
-      <div class="table-responsive">
-        <table>
-          <thead>
-            <tr>
-              <th class="text-center" style="width: 15%;">Index No.</th>
-              <th style="width: 50%;">Voter Roll Identifier</th>
-              <th class="text-center" style="width: 35%;">Committed Timestamp (UTC)</th>
-            </tr>
-          </thead>
-          <tbody id="voters_voted_table_body">
-            <!-- Populated dynamically via pagination -->
-          </tbody>
-        </table>
-      </div>
-      <div class="pagination-container">
-        <button id="btn_prev_voters" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;" disabled onclick="loadVotedTablePage(-1)">Previous</button>
-        <span id="txt_voters_page_index" style="font-weight: 600; color: var(--text-secondary);">Page 1</span>
-        <button id="btn_next_voters" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;" disabled onclick="loadVotedTablePage(1)">Next</button>
-      </div>
-    </div>
-
-    <!-- Section 2: Aggregates stats per Design ID (1-5) -->
-    <div class="panel-section">
-      <h2 class="section-title">Aggregated Choices Sheets Metrics</h2>
-      <div class="table-responsive">
-        <table>
-          <thead>
-            <tr>
-              <th style="width: 40%;">Design Sheet</th>
-              <th class="text-center" style="width: 20%;">Yes (Accept)</th>
-              <th class="text-center" style="width: 20%;">No (Reject)</th>
-              <th class="text-center" style="width: 20%;">Total Choices</th>
-            </tr>
-          </thead>
-          <tbody id="vote_stats_table_body">
-            <!-- Populated dynamically -->
-          </tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- Section 3: Final calculations rankings -->
-    <div class="panel-section" id="results_panel_container">
-      <h2 class="section-title">Calculations Compilation (Ranked Results)</h2>
-      
-      <!-- Displayed when locked -->
-      <div id="results_locked_pane" class="results-locked-pane">
-        <p style="font-size: 1.15rem; font-weight: 700; color: var(--text-error); margin-bottom: 0.5rem;">Results tabulation currently locked</p>
-        <p style="color: var(--text-secondary); font-size: 0.95rem;">Rankings computations remain locked until the temporal end time constraints expire.</p>
+    <!-- SUB-PANEL B: CHOSEN ELECTION LIVE METRICS DETAILS & TIME ADJUSTER -->
+    <div id="panel_election_details" style="display: none; margin-top: 1rem;">
+      <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; flex-wrap: wrap; gap: 1rem;">
+        <button class="btn btn-secondary" onclick="closeElectionDetails()" style="width: auto; margin-top: 0; padding: 0.5rem 1.25rem; font-size: 0.95rem;">
+          &larr; Back to Elections Index
+        </button>
+        <button class="btn" onclick="openDeleteElectionModal()" style="width: auto; margin-top: 0; padding: 0.5rem 1.15rem; font-size: 0.95rem; background-color: rgba(239, 68, 68, 0.1); color: var(--text-error); border: 1px solid var(--text-error);">
+          &empty; Delete Election Session
+        </button>
       </div>
 
-      <!-- Displayed when unlocked -->
-      <div id="results_unlocked_pane" style="display: none;">
+      <div style="border-bottom: 1px solid var(--surface-border); padding-bottom: 1rem; margin-bottom: 1.5rem;">
+        <h2 id="details_election_title" style="font-size: 1.6rem; color: var(--primary-color);">Election Title</h2>
+        <span style="color: var(--text-secondary); font-size: 0.9rem;">Participate ID Session: <code id="details_election_id">#</code></span>
+      </div>
+
+      <!-- Live Metric Small Cards Grid -->
+      <div class="dashboard-grid">
+        <div class="stat-card">
+          <div style="color: var(--text-secondary); font-weight: 600; font-size: 0.9rem;">Status</div>
+          <div id="stat_v_open" class="value" style="color: var(--success-color);">LOADING</div>
+        </div>
+        <div class="stat-card">
+          <div style="color: var(--text-secondary); font-weight: 600; font-size: 0.9rem;">Time Remaining</div>
+          <div id="stat_seconds_left" class="value" style="font-family: monospace;">0s</div>
+        </div>
+        <div class="stat-card">
+          <div style="color: var(--text-secondary); font-weight: 600; font-size: 0.9rem;">Total Registries</div>
+          <div id="stat_total_voters" class="value">0</div>
+        </div>
+        <div class="stat-card">
+          <div style="color: var(--text-secondary); font-weight: 600; font-size: 0.9rem;">Cast Signatures</div>
+          <div id="stat_voted_count" class="value">0</div>
+        </div>
+      </div>
+
+      <!-- Live Temporal Adjustment Control Panel -->
+      <div style="background-color: rgba(255, 255, 255, 0.02); border: 1px solid var(--surface-border); padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
+        <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--primary-color);">Time Control Panel</h3>
+        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.25rem;">Instantly extend or reduce the remaining voting duration for this specific session.</p>
+        
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
+          <button class="btn btn-secondary" onclick="adjustTime(300)" style="width: auto; padding: 0.5rem 1rem; margin-top: 0; border-color: rgba(16, 185, 129, 0.4); color: var(--success-color);">
+            +5 Minutes
+          </button>
+          <button class="btn btn-secondary" onclick="adjustTime(1800)" style="width: auto; padding: 0.5rem 1rem; margin-top: 0; border-color: rgba(16, 185, 129, 0.4); color: var(--success-color);">
+            +30 Minutes
+          </button>
+          <button class="btn btn-secondary" onclick="adjustTime(3600)" style="width: auto; padding: 0.5rem 1rem; margin-top: 0; border-color: rgba(16, 185, 129, 0.4); color: var(--success-color);">
+            +1 Hour
+          </button>
+          <button class="btn btn-secondary" onclick="adjustTime(-300)" style="width: auto; padding: 0.5rem 1rem; margin-top: 0; border-color: rgba(239, 68, 68, 0.3); color: var(--text-error);">
+            -5 Minutes
+          </button>
+          <button class="btn btn-secondary" onclick="adjustTime(-1800)" style="width: auto; padding: 0.5rem 1rem; margin-top: 0; border-color: rgba(239, 68, 68, 0.3); color: var(--text-error);">
+            -30 Minutes
+          </button>
+          <button class="btn btn-secondary" onclick="adjustTime(-3600)" style="width: auto; padding: 0.5rem 1rem; margin-top: 0; border-color: rgba(239, 68, 68, 0.3); color: var(--text-error);">
+            -1 Hour
+          </button>
+        </div>
+        
+        <div style="margin-top: 1.5rem; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 1rem; display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
+          <div style="flex: 1; min-width: 200px;">
+            <label for="custom_adj_minutes" style="font-size: 0.8rem; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">Custom Time Adjustment (Minutes)</label>
+            <input type="number" id="custom_adj_minutes" placeholder="e.g. 15 (use negative, e.g. -15, to subtract)" style="width: 100%; padding: 0.6rem 0.8rem; font-size: 0.95rem; background-color: var(--bg-color); border: 1px solid var(--surface-border); border-radius: 8px; color: var(--text-primary);">
+          </div>
+          <button class="btn btn-primary" onclick="handleCustomTimeAdjustment()" style="width: auto; margin-top: 0; height: 38px; padding: 0 1.25rem; font-size: 0.95rem;">
+            Apply Adjust
+          </button>
+        </div>
+      </div>
+
+      <!-- Paginated Committed Roll Signatures -->
+      <div class="panel-section" style="border-top: none; padding-top: 0; margin-top: 0;">
+        <h2 class="section-title">Committed Roll Signatures (Choices Hidden)</h2>
         <div class="table-responsive">
           <table>
             <thead>
               <tr>
-                <th class="text-center" style="width: 15%;">Rank Position</th>
-                <th style="width: 30%;">Layout Sheet ID</th>
-                <th class="text-center" style="width: 20%;">Score (Yes - No)</th>
-                <th class="text-center" style="width: 15%;">Total Votes</th>
-                <th class="text-center" style="width: 20%;">Split Ratio</th>
+                <th class="text-center" style="width: 15%;">Index No.</th>
+                <th style="width: 50%;">Voter Roll Identifier</th>
+                <th class="text-center" style="width: 35%;">Committed Timestamp (UTC)</th>
               </tr>
             </thead>
-            <tbody id="results_ranked_table_body">
+            <tbody id="voters_voted_table_body">
+              <!-- Populated dynamically via pagination -->
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination-container">
+          <button id="btn_prev_voters" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;" disabled onclick="loadVotedTablePage(-1)">Previous</button>
+          <span id="txt_voters_page_index" style="font-weight: 600; color: var(--text-secondary);">Page 1</span>
+          <button id="btn_next_voters" class="btn btn-secondary" style="width: auto; padding: 0.5rem 1rem;" disabled onclick="loadVotedTablePage(1)">Next</button>
+        </div>
+      </div>
+
+      <!-- Aggregated Choices metrics -->
+      <div class="panel-section">
+        <h2 class="section-title">Aggregated Choice Sheet Metrics</h2>
+        <div class="table-responsive">
+          <table>
+            <thead>
+              <tr>
+                <th style="width: 40%;">Design Sheet Theme</th>
+                <th class="text-center" style="width: 20%;">Yes (Accept)</th>
+                <th class="text-center" style="width: 20%;">No (Reject)</th>
+                <th class="text-center" style="width: 20%;">Total Choices Cast</th>
+              </tr>
+            </thead>
+            <tbody id="vote_stats_table_body">
               <!-- Populated dynamically -->
             </tbody>
           </table>
         </div>
       </div>
+
+      <!-- Calculations and final rankings -->
+      <div class="panel-section" id="results_panel_container">
+        <h2 class="section-title">Calculations Compilation (Ranked Results)</h2>
+        
+        <!-- Locked Mode Display -->
+        <div id="results_locked_pane" class="results-locked-pane">
+          <p style="font-size: 1.15rem; font-weight: 700; color: var(--text-error); margin-bottom: 0.5rem;">Results computation is locked</p>
+          <p style="color: var(--text-secondary); font-size: 0.95rem;">Rankings computations remain locked until the temporal end time constraints of this election expire.</p>
+        </div>
+
+        <!-- Unlocked Mode Display -->
+        <div id="results_unlocked_pane" style="display: none;">
+          <div class="table-responsive">
+            <table>
+              <thead>
+                <tr>
+                  <th class="text-center" style="width: 15%;">Position</th>
+                  <th style="width: 35%;">Layout Sheet</th>
+                  <th class="text-center" style="width: 15%;">Yes Votes</th>
+                  <th class="text-center" style="width: 15%;">No Votes</th>
+                  <th class="text-center" style="width: 20%;">Net Score (Yes - No)</th>
+                </tr>
+              </thead>
+              <tbody id="results_ranked_table_body">
+                <!-- Populated dynamically -->
+              </tbody>
+            </table>
+          </div>
+        </div>
+      </div>
+
+    </div>
+
+    <!-- SUB-PANEL C: CUSTOMIZE VOTING OPTIONS (AFTER CREATION) -->
+    <div id="panel_customize_options" style="display: none; margin-top: 1rem;">
+      <div style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+        <button class="btn btn-secondary" onclick="finishAndLaunchElection()" style="width: auto; margin-top: 0; padding: 0.5rem 1.25rem; font-size: 0.95rem;">
+          &larr; Done, Return to Index
+        </button>
+        <span style="font-weight: bold; color: var(--success-color);">Custom Option Editor Active</span>
+      </div>
+
+      <div style="border-bottom: 1px solid var(--surface-border); padding-bottom: 1rem; margin-bottom: 1.5rem;">
+        <h2 id="options_election_title" style="font-size: 1.6rem; color: var(--primary-color);">Customize Voting Options</h2>
+        <span style="color: var(--text-secondary); font-size: 0.9rem;">Adding dynamic options for Election ID: <code id="options_election_id">#</code></span>
+      </div>
+      
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
+        <!-- Left Column: New Option Input -->
+        <div style="background-color: rgba(255,255,255,0.02); border: 1px solid var(--surface-border); padding: 1.5rem; border-radius: 8px;">
+          <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 1.25rem; color: var(--primary-color);">Add New Voting Option</h3>
+          <form onsubmit="handleAddDynamicOption(event)">
+            <label for="new_option_text" style="font-size: 0.9rem; display: block; margin-bottom: 0.5rem;">Option Label / Text Description</label>
+            <input type="text" id="new_option_text" placeholder="e.g. Design 1: Retro Organic Cotton Hoodie" required autocomplete="off" style="width: 100%; margin-bottom: 1rem; padding: 0.6rem 0.8rem; font-size: 0.95rem; background-color: var(--bg-color); border: 1px solid var(--surface-border); border-radius: 8px; color: var(--text-primary);">
+
+            <label for="new_option_image" style="font-size: 0.9rem; display: block; margin-bottom: 0.5rem;">Option Image</label>
+            <input type="file" id="new_option_image" accept="image/*" required onchange="previewSelectedImage(event)" style="width: 100%; margin-bottom: 1.5rem; color: var(--text-secondary); font-size: 0.9rem; padding: 0.25rem 0;">
+
+            <div id="image_preview_container" style="display: none; margin-bottom: 1.5rem; text-align: center; border: 1px dashed var(--surface-border); padding: 1rem; border-radius: 8px; background-color: rgba(0,0,0,0.2);">
+              <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Selected Image Preview</p>
+              <img id="image_preview" src="" style="max-height: 180px; border-radius: 6px; max-width: 100%; object-fit: contain;">
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="btn_add_option" style="width: 100%;">
+              Post Option <div id="spinner_add_option" class="spinner"></div>
+            </button>
+            <div id="options_alert_error" style="display: none; color: var(--text-error); font-size: 0.85rem; margin-top: 1rem; text-align: center;"></div>
+          </form>
+        </div>
+
+        <!-- Right Column: Loaded Options list -->
+        <div style="background-color: rgba(255,255,255,0.01); border: 1px solid var(--surface-border); padding: 1.5rem; border-radius: 8px; max-height: 600px; overflow-y: auto;">
+          <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--primary-color);">Current Option Cards</h3>
+          <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.25rem;">These choices are live. Voters will vote YES or NO for each.</p>
+          
+          <div id="added_options_list" style="display: flex; flex-direction: column; gap: 1rem;">
+            <p style="text-align: center; color: var(--text-secondary); font-size: 0.9rem; padding: 2rem;">No custom options added yet. (Will fall back to default template of 5 standard design sheets if left empty.)</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- DELETE ELECTION MODAL (Requires admin password to delete) -->
+  <div id="delete_election_modal" style="display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background-color: rgba(0,0,0,0.85); z-index: 1000; align-items: center; justify-content: center; padding: 1.5rem;">
+    <div style="background-color: #0f172a; border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 12px; max-width: 500px; width: 100%; padding: 2rem; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);">
+      <h2 style="font-size: 1.4rem; color: var(--text-error); margin-bottom: 1rem; display: flex; align-items: center; gap: 0.5rem;">
+        ⚠️ Confirm Permanent Deletion
+      </h2>
+      <p style="color: var(--text-secondary); font-size: 0.95rem; line-height: 1.5; margin-bottom: 1.5rem;">
+        Are you absolutely sure you want to permanently delete the election <strong id="delete_target_title" style="color: var(--text-primary);"></strong> (<code id="delete_target_id">#</code>) and all its cast votes? This action is irreversible.
+      </p>
+      
+      <form onsubmit="handleConfirmedElectionDeletion(event)">
+        <label for="delete_admin_password" style="font-size: 0.9rem; color: var(--text-primary); display: block; margin-bottom: 0.5rem;">Please enter your admin password to confirm:</label>
+        <input type="password" id="delete_admin_password" required placeholder="Admin accounts password" style="width: 100%; margin-bottom: 1.5rem; padding: 0.75rem 1rem; background-color: var(--bg-color); border: 1px solid var(--surface-border); border-radius: 8px; color: var(--text-primary); font-size: 0.95rem;">
+        
+        <div id="delete_modal_error" style="display: none; color: var(--text-error); font-size: 0.85rem; margin-bottom: 1rem; background-color: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); padding: 0.5rem 0.75rem; border-radius: 6px;"></div>
+        
+        <div style="display: flex; gap: 1rem; justify-content: flex-end;">
+          <button type="button" class="btn btn-secondary" onclick="closeDeleteElectionModal()" style="width: auto; margin-top: 0; padding: 0.5rem 1.25rem;">
+            Cancel
+          </button>
+          <button type="submit" class="btn" id="btn_confirm_delete_election" style="width: auto; margin-top: 0; padding: 0.5rem 1.25rem; background-color: var(--text-error); color: white; cursor: pointer;">
+            Delete & Purge <div id="spinner_delete_election" class="spinner"></div>
+          </button>
+        </div>
+      </form>
     </div>
   </div>
 
   <script>
     let currentVotersPage = 1;
     let pollDiagnosticTimer = null;
-    let votingEndCountSeconds = 0;
+    let selectedAdminElectionId = null;
+    let currentElectionOptions = []; // Hold list of { id, option_text, image_data } for currently selected election
+
+    function loadSelectedElectionOptions(callback) {
+      if (!selectedAdminElectionId) {
+        currentElectionOptions = [];
+        if (callback) callback();
+        return;
+      }
+      fetch(`/api/elections/options?election_id=${selectedAdminElectionId}`)
+        .then(res => res.json())
+        .then(data => {
+          currentElectionOptions = data;
+          if (callback) callback();
+        })
+        .catch(err => {
+          console.error("Failed to load options", err);
+          currentElectionOptions = [];
+          if (callback) callback();
+        });
+    }
 
     // Run verification status checks
     window.addEventListener('DOMContentLoaded', () => {
@@ -225,12 +485,7 @@
       document.getElementById('admin_login_panel').style.display = 'none';
       document.getElementById('admin_dashboard').style.display = 'block';
       
-      currentVotersPage = 1;
-      queryDiagnosticStats();
-
-      // Launch diagnostic monitoring checks on 30-second loop
-      if (pollDiagnosticTimer) clearInterval(pollDiagnosticTimer);
-      pollDiagnosticTimer = setInterval(queryDiagnosticStats, 30000);
+      closeElectionDetails();
     }
 
     function handleLogout() {
@@ -243,17 +498,488 @@
         });
     }
 
+    // LIST SESSIONS
+    function fetchAndRenderElections() {
+      const listContainer = document.getElementById('admin_elections_list');
+      listContainer.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Loading ongoing votes...</p>';
+
+      fetch('/api/elections')
+        .then(res => res.json())
+        .then(data => {
+          listContainer.innerHTML = '';
+          if (data.length === 0) {
+            listContainer.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">No votes or elections created yet.</p>';
+            return;
+          }
+          data.forEach(el => {
+            const card = document.createElement('div');
+            card.className = 'election-card';
+            card.setAttribute('tabindex', '0');
+            card.setAttribute('role', 'button');
+            
+            let timeStr = 'Concluded';
+            if (el.voting_open) {
+              const hours = Math.floor(el.time_remaining_seconds / 3600);
+              const mins = Math.floor((el.time_remaining_seconds % 3600) / 60);
+              timeStr = hours > 0 ? `${hours}h ${mins}m remaining` : `${mins}m remaining`;
+            }
+
+            card.innerHTML = `
+              <h3 style="margin-bottom: 0.5rem; color: var(--primary-color);">${el.title}</h3>
+              <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 1rem;">Click to check metrics details, review choices, or adjust timeframe limits.</p>
+              <div class="badge-group">
+                <span class="badge ${el.voting_open ? 'open' : 'closed'}">${el.voting_open ? 'ACTIVE' : 'CONCLUDED'}</span>
+                <span class="badge" style="background-color: rgba(255, 255, 255, 0.05); color: var(--text-primary);">${el.voted_count} votes</span>
+                <span class="badge" style="background-color: rgba(208, 188, 255, 0.1); color: var(--primary-color);">${timeStr}</span>
+              </div>
+            `;
+
+            card.addEventListener('click', () => {
+              openElectionDetails(el.id, el.title);
+            });
+
+            card.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                card.click();
+              }
+            });
+
+            listContainer.appendChild(card);
+          });
+        })
+        .catch(err => {
+          console.error(err);
+          listContainer.innerHTML = '<p style="color: var(--text-error); text-align: center; padding: 2rem;">Error reading sessions from server.</p>';
+        });
+    }
+
+    // SWITCH PANEL VIEWS
+    function openElectionDetails(id, title) {
+      selectedAdminElectionId = id;
+      document.getElementById('details_election_title').innerText = title;
+      document.getElementById('details_election_id').innerText = '#' + id;
+
+      loadSelectedElectionOptions(() => {
+        document.getElementById('panel_elections_index').style.display = 'none';
+        document.getElementById('panel_election_details').style.display = 'block';
+
+        currentVotersPage = 1;
+        queryDiagnosticStats();
+
+        if (pollDiagnosticTimer) clearInterval(pollDiagnosticTimer);
+        pollDiagnosticTimer = setInterval(queryDiagnosticStats, 5000); // Poll details every 5s
+      });
+    }
+
+    function closeElectionDetails() {
+      selectedAdminElectionId = null;
+      if (pollDiagnosticTimer) clearInterval(pollDiagnosticTimer);
+
+      document.getElementById('panel_election_details').style.display = 'none';
+      document.getElementById('panel_elections_index').style.display = 'block';
+
+      fetchAndRenderElections();
+    }
+
+    // CREATE VOTE
+    function handleCreateElection(e) {
+      e.preventDefault();
+      const bannerErr = document.getElementById('admin_error_banner');
+      const bannerAlert = document.getElementById('admin_alert_banner');
+      bannerErr.style.display = 'none';
+      bannerAlert.style.display = 'none';
+
+      const title = document.getElementById('new_vote_title').value.trim();
+      const hours = parseInt(document.getElementById('new_vote_hours').value) || 0;
+      const minutes = parseInt(document.getElementById('new_vote_minutes').value) || 0;
+      const durationSeconds = (hours * 3600) + (minutes * 60);
+
+      if (durationSeconds <= 0) {
+        bannerErr.innerText = "Please specify a positive duration.";
+        bannerErr.style.display = 'block';
+        return;
+      }
+
+      const spinner = document.getElementById('spinner_create');
+      spinner.style.display = 'inline-block';
+      const submitBtn = document.getElementById('btn_create_vote');
+      submitBtn.disabled = true;
+
+      fetch('/admin/elections/create', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ title, duration_seconds: durationSeconds })
+      })
+      .then(async res => {
+        spinner.style.display = 'none';
+        submitBtn.disabled = false;
+        
+        if (res.status === 200) {
+          const data = await res.json();
+          document.getElementById('new_vote_title').value = '';
+          document.getElementById('new_vote_hours').value = '1';
+          document.getElementById('new_vote_minutes').value = '0';
+          
+          openCustomizeOptions(data.id, title);
+        } else {
+          try {
+            const errData = await res.json();
+            bannerErr.innerText = errData.error || "Failed to create vote.";
+          } catch {
+            bannerErr.innerText = "Error: server failed to create session.";
+          }
+          bannerErr.style.display = 'block';
+        }
+      })
+      .catch(err => {
+        spinner.style.display = 'none';
+        submitBtn.disabled = false;
+        bannerErr.innerText = "Network request failed.";
+        bannerErr.style.display = 'block';
+      });
+    }
+
+    // -- Option Customization Actions --
+    let customizeElectionId = null;
+    let customizeElectionTitle = "";
+
+    function openCustomizeOptions(id, title) {
+      customizeElectionId = id;
+      customizeElectionTitle = title;
+      document.getElementById('options_election_title').innerText = "Customize Voting Options: " + title;
+      document.getElementById('options_election_id').innerText = '#' + id;
+      
+      document.getElementById('new_option_text').value = '';
+      document.getElementById('new_option_image').value = '';
+      document.getElementById('image_preview_container').style.display = 'none';
+      document.getElementById('image_preview').src = '';
+      
+      document.getElementById('panel_elections_index').style.display = 'none';
+      document.getElementById('panel_customize_options').style.display = 'block';
+      
+      fetchAndRenderCurrentCustomOptions();
+    }
+
+    function finishAndLaunchElection() {
+      document.getElementById('panel_customize_options').style.display = 'none';
+      document.getElementById('panel_elections_index').style.display = 'block';
+      fetchAndRenderElections();
+    }
+
+    function previewSelectedImage(e) {
+      const file = e.target.files[0];
+      const previewContainer = document.getElementById('image_preview_container');
+      const previewImg = document.getElementById('image_preview');
+      
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = function(evt) {
+          previewImg.src = evt.target.result;
+          previewContainer.style.display = 'block';
+        };
+        reader.readAsDataURL(file);
+      } else {
+        previewContainer.style.display = 'none';
+        previewImg.src = '';
+      }
+    }
+
+    function fetchAndRenderCurrentCustomOptions() {
+      const listContainer = document.getElementById('added_options_list');
+      const badge = document.getElementById('options_count_badge');
+      
+      listContainer.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 1rem;">Loading options...</p>';
+      
+      fetch(`/api/elections/options?election_id=${customizeElectionId}`)
+        .then(res => res.json())
+        .then(options => {
+          badge.innerText = options.length;
+          listContainer.innerHTML = '';
+          
+          if (options.length === 0) {
+            listContainer.innerHTML = '<p style="text-align: center; color: var(--text-secondary); font-size: 0.9rem; padding: 2rem;">No custom options added yet. (Will fall back to default template of 5 standard design sheets if left empty.)</p>';
+            return;
+          }
+          
+          options.forEach((opt, idx) => {
+            const row = document.createElement('div');
+            row.style = "display: flex; gap: 1rem; align-items: center; border: 1px solid var(--surface-border); border-radius: 8px; padding: 0.75rem; background-color: rgba(255,255,255,0.015);";
+            
+            const numSpan = document.createElement('span');
+            numSpan.style = "font-weight: bold; color: var(--primary-color); font-size: 1.1rem; width: 30px;";
+            numSpan.innerText = `#${idx + 1}`;
+            
+            const img = document.createElement('img');
+            img.src = opt.image_data;
+            img.style = "max-width: 80px; height: 80px; object-fit: contain; border-radius: 4px; border: 1px solid var(--surface-border); background: #000;";
+            
+            const textContent = document.createElement('div');
+            textContent.style = "flex: 1; min-width: 0;";
+            textContent.innerHTML = `<p style="font-size: 0.95rem; font-weight: 500; margin-bottom: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary);">${opt.option_text}</p>`;
+            
+            const delBtn = document.createElement('button');
+            delBtn.className = "btn";
+            delBtn.style = "width: auto; margin-top: 0; padding: 0.35rem 0.75rem; font-size: 0.8rem; background-color: rgba(239, 68, 68, 0.1); color: var(--text-error); border: 1px solid var(--text-error);";
+            delBtn.innerText = "Remove";
+            delBtn.onclick = () => {
+              delBtn.disabled = true;
+              fetch('/admin/elections/options/delete', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id: opt.id })
+              })
+              .then(res => res.json())
+              .then(() => fetchAndRenderCurrentCustomOptions())
+              .catch(err => console.error(err));
+            };
+            
+            row.appendChild(numSpan);
+            row.appendChild(img);
+            row.appendChild(textContent);
+            row.appendChild(delBtn);
+            listContainer.appendChild(row);
+          });
+        })
+        .catch(err => {
+          console.error(err);
+          listContainer.innerHTML = '<p style="text-align: center; color: var(--text-error); padding: 1rem;">Failed to fetch current options</p>';
+        });
+    }
+
+    function handleAddDynamicOption(e) {
+      e.preventDefault();
+      
+      const textInput = document.getElementById('new_option_text');
+      const fileInput = document.getElementById('new_option_image');
+      const errorDiv = document.getElementById('options_alert_error');
+      
+      errorDiv.style.display = 'none';
+      
+      const text = textInput.value.trim();
+      const file = fileInput.files[0];
+      
+      if (!text || !file) return;
+      
+      const spinner = document.getElementById('spinner_add_option');
+      const submitBtn = document.getElementById('btn_add_option');
+      
+      spinner.style.display = 'inline-block';
+      submitBtn.disabled = true;
+      
+      const reader = new FileReader();
+      reader.onerror = function() {
+        spinner.style.display = 'none';
+        submitBtn.disabled = false;
+        errorDiv.innerText = "Failed to load image file from disk.";
+        errorDiv.style.display = 'block';
+      };
+      
+      reader.onload = function(evt) {
+        const base64Data = evt.target.result;
+        
+        fetch('/admin/elections/options', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            election_id: customizeElectionId,
+            option_text: text,
+            image_data: base64Data
+          })
+        })
+        .then(async res => {
+          spinner.style.display = 'none';
+          submitBtn.disabled = false;
+          
+          if (res.status === 200) {
+            textInput.value = '';
+            fileInput.value = '';
+            document.getElementById('image_preview_container').style.display = 'none';
+            document.getElementById('image_preview').src = '';
+            fetchAndRenderCurrentCustomOptions();
+          } else {
+            const err = await res.json();
+            errorDiv.innerText = err.error || "Execution fault.";
+            errorDiv.style.display = 'block';
+          }
+        })
+        .catch(err => {
+          spinner.style.display = 'none';
+          submitBtn.disabled = false;
+          errorDiv.innerText = "Network request failed.";
+          errorDiv.style.display = 'block';
+        });
+      };
+      reader.readAsDataURL(file);
+    }
+
+    // -- Deletion Confirmation Actions --
+    function openDeleteElectionModal() {
+      if (!selectedAdminElectionId) return;
+      
+      const detailsTitle = document.getElementById('details_election_title').innerText;
+      document.getElementById('delete_target_title').innerText = detailsTitle;
+      document.getElementById('delete_target_id').innerText = '#' + selectedAdminElectionId;
+      document.getElementById('delete_admin_password').value = '';
+      document.getElementById('delete_modal_error').style.display = 'none';
+      
+      document.getElementById('delete_election_modal').style.display = 'flex';
+    }
+
+    function closeDeleteElectionModal() {
+      document.getElementById('delete_election_modal').style.display = 'none';
+    }
+
+    function handleConfirmedElectionDeletion(e) {
+      e.preventDefault();
+      
+      const password = document.getElementById('delete_admin_password').value;
+      const errorDiv = document.getElementById('delete_modal_error');
+      errorDiv.style.display = 'none';
+      
+      const spinner = document.getElementById('spinner_delete_election');
+      const submitBtn = document.getElementById('btn_confirm_delete_election');
+      
+      spinner.style.display = 'inline-block';
+      submitBtn.disabled = true;
+      
+      fetch('/admin/elections/delete', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          election_id: selectedAdminElectionId,
+          password: password
+        })
+      })
+      .then(async res => {
+        spinner.style.display = 'none';
+        submitBtn.disabled = false;
+        
+        if (res.status === 200) {
+          closeDeleteElectionModal();
+          closeElectionDetails(); // Redirect back to index
+        } else {
+          try {
+            const err = await res.json();
+            errorDiv.innerText = err.error || "Authorization failure.";
+          } catch {
+            errorDiv.innerText = "Internal server authentication mismatch.";
+          }
+          errorDiv.style.display = 'block';
+        }
+      })
+      .catch(err => {
+        spinner.style.display = 'none';
+        submitBtn.disabled = false;
+        errorDiv.innerText = "Network transmission failed.";
+        errorDiv.style.display = 'block';
+      });
+    }
+
+    // -- Custom Time Control --
+    function handleCustomTimeAdjustment() {
+      const minutesInput = document.getElementById('custom_adj_minutes');
+      const minutes = parseInt(minutesInput.value);
+      if (isNaN(minutes) || minutes === 0) {
+        alert("Please enter a valid non-zero number of minutes.");
+        return;
+      }
+      adjustTime(minutes * 60);
+      minutesInput.value = '';
+    }
+
+    // ADJUST TIME LIMITS
+    function adjustTime(deltaSeconds) {
+      if (!selectedAdminElectionId) return;
+      const bannerErr = document.getElementById('admin_error_banner');
+      const bannerAlert = document.getElementById('admin_alert_banner');
+      bannerErr.style.display = 'none';
+      bannerAlert.style.display = 'none';
+
+      fetch('/admin/elections/adjust-time', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ election_id: selectedAdminElectionId, delta_seconds: deltaSeconds })
+      })
+      .then(async res => {
+        if (res.status === 200) {
+          bannerAlert.innerText = "Time limit modified successfully!";
+          bannerAlert.style.display = 'block';
+          queryDiagnosticStats();
+          setTimeout(() => bannerAlert.style.display = 'none', 4000);
+        } else {
+          try {
+            const errData = await res.json();
+            bannerErr.innerText = errData.error || "Failed to adjust duration.";
+          } catch {
+            bannerErr.innerText = "Failure updating remaining duration limit.";
+          }
+          bannerErr.style.display = 'block';
+        }
+      })
+      .catch(() => {
+        bannerErr.innerText = "Network transmission failed.";
+        bannerErr.style.display = 'block';
+      });
+    }
+
+    // RESEED REGISTRY
+    function handleReseedDatabase() {
+      if (!confirm("Are you sure? This will delete all cast votes, purge voted list histories, and restore default registries completely!")) {
+        return;
+      }
+
+      const bannerErr = document.getElementById('admin_error_banner');
+      const bannerAlert = document.getElementById('admin_alert_banner');
+      bannerErr.style.display = 'none';
+      bannerAlert.style.display = 'none';
+
+      const spinner = document.getElementById('spinner_reseed');
+      spinner.style.display = 'inline-block';
+      const reseedBtn = document.getElementById('btn_reseed');
+      reseedBtn.disabled = true;
+
+      fetch('/admin/reseed', {
+        method: 'POST'
+      })
+      .then(async res => {
+        spinner.style.display = 'none';
+        reseedBtn.disabled = false;
+        if (res.status === 200) {
+          bannerAlert.innerText = "Database successfully reseeded! System restored back to defaults.";
+          bannerAlert.style.display = 'block';
+          closeElectionDetails();
+          setTimeout(() => bannerAlert.style.display = 'none', 6000);
+        } else {
+          try {
+            const errData = await res.json();
+            bannerErr.innerText = errData.error || "Reseeding failed.";
+          } catch {
+            bannerErr.innerText = "Error executing database reseed.";
+          }
+          bannerErr.style.display = 'block';
+        }
+      })
+      .catch(() => {
+        spinner.style.display = 'none';
+        reseedBtn.disabled = false;
+        bannerErr.innerText = "Failed connection to core database server.";
+        bannerErr.style.display = 'block';
+      });
+    }
+
     // Core diagnostic metrics aggregation
     function queryDiagnosticStats() {
+      if (!selectedAdminElectionId) return;
+
       // 1. Fetch system status
-      fetch('/admin/status')
+      fetch(`/admin/status?election_id=${selectedAdminElectionId}`)
         .then(async res => {
           if (res.status === 200) {
             const data = await res.json();
             
             const isOpen = data.voting_open;
             const remaining = data.time_remaining_seconds;
-            votingEndCountSeconds = remaining;
 
             document.getElementById('stat_v_open').innerText = isOpen ? "OPEN" : "CLOSED";
             document.getElementById('stat_v_open').style.color = isOpen ? "var(--success-color)" : "var(--text-error)";
@@ -268,7 +994,7 @@
             document.getElementById('stat_voted_count').innerText = data.voted_count;
 
             // Direct result unlocking check
-            if (votingEndCountSeconds === 0) {
+            if (remaining === 0) {
               fetchRankedResults();
             } else {
               document.getElementById('results_locked_pane').style.display = 'block';
@@ -289,7 +1015,8 @@
 
     // Section 1: Fetch Voters Voted table page
     function fetchVotersVotedTable() {
-      fetch(`/admin/voters-voted?page=${currentVotersPage}`)
+      if (!selectedAdminElectionId) return;
+      fetch(`/admin/voters-voted?page=${currentVotersPage}&election_id=${selectedAdminElectionId}`)
         .then(res => res.json())
         .then(data => {
           const tbody = document.getElementById('voters_voted_table_body');
@@ -298,7 +1025,7 @@
           const startIdx = (currentVotersPage - 1) * data.page_size + 1;
           
           if (data.data.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-secondary);">No votes recorded yet in SQLite.</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="3" style="text-align: center; color: var(--text-secondary);">No votes recorded yet for this election.</td></tr>';
           } else {
             data.data.forEach((item, index) => {
               const tr = document.createElement('tr');
@@ -336,20 +1063,30 @@
 
     // Section 2: Fetch overall vote-stats
     function fetchVotesAggregateStats() {
-      fetch('/admin/vote-stats')
+      if (!selectedAdminElectionId) return;
+      fetch(`/admin/vote-stats?election_id=${selectedAdminElectionId}`)
         .then(res => res.json())
         .then(data => {
           const tbody = document.getElementById('vote_stats_table_body');
           tbody.innerHTML = '';
 
-          // Let's map design_id to structural titles used in voting page for incredible polish
-          const sheetNames = {
-            1: "Design 1: T-Shirt Options",
-            2: "Design 2: Canvas Hoodies",
-            3: "Design 3: Athletic Sweatshirts",
-            4: "Design 4: Technical Outerwear",
-            5: "Design 5: Gradient Joggers"
-          };
+          const sheetNames = {};
+          if (currentElectionOptions && currentElectionOptions.length > 0) {
+            currentElectionOptions.forEach((opt, index) => {
+              sheetNames[index + 1] = opt.option_text;
+            });
+          } else {
+            sheetNames[1] = "Design 1: T-Shirt Options";
+            sheetNames[2] = "Design 2: Canvas Hoodies";
+            sheetNames[3] = "Design 3: Athletic Sweatshirts";
+            sheetNames[4] = "Design 4: Technical Outerwear";
+            sheetNames[5] = "Design 5: Gradient Joggers";
+          }
+
+          if (!data.stats || data.stats.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align: center; color: var(--text-secondary);">No preference metrics compiled yet.</td></tr>';
+            return;
+          }
 
           data.stats.forEach(s => {
             const tr = document.createElement('tr');
@@ -384,7 +1121,8 @@
 
     // Section 3: Fetch final results
     function fetchRankedResults() {
-      fetch('/admin/results')
+      if (!selectedAdminElectionId) return;
+      fetch(`/admin/results?election_id=${selectedAdminElectionId}`)
         .then(res => {
           if (res.status === 200) {
             return res.json();
@@ -400,13 +1138,23 @@
           const tbody = document.getElementById('results_ranked_table_body');
           tbody.innerHTML = '';
 
-          const sheetNamesShort = {
-            1: "Design 1 (T-Shirts)",
-            2: "Design 2 (Hoodies)",
-            3: "Design 3 (Sweatshirts)",
-            4: "Design 4 (Outerwear)",
-            5: "Design 5 (Joggers)"
-          };
+          const sheetNamesShort = {};
+          if (currentElectionOptions && currentElectionOptions.length > 0) {
+            currentElectionOptions.forEach((opt, index) => {
+              sheetNamesShort[index + 1] = opt.option_text;
+            });
+          } else {
+            sheetNamesShort[1] = "Design 1 (T-Shirts)";
+            sheetNamesShort[2] = "Design 2 (Hoodies)";
+            sheetNamesShort[3] = "Design 3 (Sweatshirts)";
+            sheetNamesShort[4] = "Design 4 (Outerwear)";
+            sheetNamesShort[5] = "Design 5 (Joggers)";
+          }
+
+          if (results.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align: center; color: var(--text-secondary);">No votes recorded yet to ranking.</td></tr>';
+            return;
+          }
 
           results.forEach((r, idx) => {
             const tr = document.createElement('tr');
@@ -419,24 +1167,25 @@
             const name = sheetNamesShort[r.design_id] || `Design Sheet #${r.design_id}`;
             tdId.innerText = name;
 
+            const tdYesVotes = document.createElement('td');
+            tdYesVotes.className = 'text-center';
+            tdYesVotes.innerText = r.yes_votes;
+            tdYesVotes.style.color = "var(--success-color)";
+
+            const tdNoVotes = document.createElement('td');
+            tdNoVotes.className = 'text-center';
+            tdNoVotes.innerText = r.no_votes;
+            tdNoVotes.style.color = "var(--text-error)";
+
             const tdScore = document.createElement('td');
             tdScore.className = 'text-center';
             tdScore.innerHTML = `<strong style="color: var(--primary-color);">${r.score > 0 ? '+' : ''}${r.score}</strong>`;
 
-            const tdTotal = document.createElement('td');
-            tdTotal.className = 'text-center';
-            tdTotal.innerText = r.total_votes;
-
-            const tdRatio = document.createElement('td');
-            tdRatio.className = 'text-center';
-            const pct = r.total_votes > 0 ? Math.round((r.yes_votes / r.total_votes) * 100) : 0;
-            tdRatio.innerText = `${pct}% Yes (${r.yes_votes} / ${r.no_votes})`;
-
             tr.appendChild(tdRank);
             tr.appendChild(tdId);
+            tr.appendChild(tdYesVotes);
+            tr.appendChild(tdNoVotes);
             tr.appendChild(tdScore);
-            tr.appendChild(tdTotal);
-            tr.appendChild(tdRatio);
             tbody.appendChild(tr);
           });
         })

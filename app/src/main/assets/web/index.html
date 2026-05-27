@@ -8,10 +8,22 @@
 </head>
 <body>
 
+  <!-- Screen 0: Ongoing Votes Selection -->
+  <div id="screen_0" class="spa-screen active">
+    <h1>Ongoing Votes</h1>
+    <p class="subtitle">Select the election or legislative proposal you wish to participate in.</p>
+    
+    <div id="alert_s0" class="alert-container" aria-live="assertive"></div>
+    
+    <div id="elections_container" class="election-grid">
+      <p style="text-align: center; color: var(--text-secondary);">Loading ongoing votes...</p>
+    </div>
+  </div>
+
   <!-- Screen 1: Roll Entry -->
-  <div id="screen_1" class="spa-screen active">
-    <h1>Layout Voting System</h1>
-    <p class="subtitle">Please enter your roll identifier to retrieve your voter profile.</p>
+  <div id="screen_1" class="spa-screen">
+    <h1 id="verify_header_title">Layout Voting System</h1>
+    <p class="subtitle" id="verify_header_subtitle">Please enter your roll identifier to retrieve your voter profile.</p>
     
     <div id="alert_s1" class="alert-container" aria-live="assertive"></div>
 
@@ -21,6 +33,9 @@
       
       <button type="submit" id="btn_verify_roll" class="btn btn-primary">
         Verify Roll ID <div id="spinner_s1" class="spinner"></div>
+      </button>
+      <button type="button" onclick="navigateToScreen(0)" class="btn btn-secondary">
+        &larr; Back to ongoing votes
       </button>
     </form>
   </div>
@@ -188,6 +203,7 @@
 
   <script>
     // State Erasure Rule: Explicitly flush volatile memory on reload
+    window.selectedElectionId = null;
     window.currentName = null;
     window.currentRoll = null;
     window.currentConfirmNonceToken = null;
@@ -196,6 +212,9 @@
 
     // Structural Zero-Trust Routing Guards
     function navigateToScreen(targetScreenId) {
+      if (targetScreenId === 1 && !window.selectedElectionId) {
+        targetScreenId = 0; // Return to selection list if there is no selected election
+      }
       if (targetScreenId === 3 && !window.currentConfirmNonceToken) {
         targetScreenId = 1; // Kick back if token is missing
       }
@@ -208,13 +227,88 @@
       const activeEl = document.getElementById(targetScreenId === 'locked' ? 'screen_locked' : `screen_${targetScreenId}`);
       if (activeEl) activeEl.classList.add('active');
 
+      if (targetScreenId === 0) {
+        fetchElections();
+      }
+
       // Native clean history wipe
       history.replaceState(null, "", "");
     }
 
+    // Load available elections from backend
+    function fetchElections() {
+      const container = document.getElementById('elections_container');
+      const alertDiv = document.getElementById('alert_s0');
+      alertDiv.style.display = 'none';
+      container.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 2rem;">Loading ongoing votes...</p>';
+
+      fetch('/api/elections')
+        .then(res => res.json())
+        .then(data => {
+          container.innerHTML = '';
+          if (data.length === 0) {
+            container.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 2rem;">No active votes or sessions found at this time.</p>';
+            return;
+          }
+          data.forEach(el => {
+            const card = document.createElement('div');
+            card.className = 'election-card';
+            card.setAttribute('tabindex', '0');
+            card.setAttribute('role', 'button');
+            card.setAttribute('aria-label', `Select election: ${el.title}`);
+            
+            let timeStr = 'Concluded';
+            if (el.voting_open) {
+              const hours = Math.floor(el.time_remaining_seconds / 3600);
+              const mins = Math.floor((el.time_remaining_seconds % 3600) / 60);
+              timeStr = hours > 0 ? `${hours}h ${mins}m remaining` : `${mins}m remaining`;
+            }
+
+            card.innerHTML = `
+              <h3 style="margin-bottom: 0.5rem; color: var(--primary-color);">${el.title}</h3>
+              <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1rem;">Click to participate and cast your layout choices.</p>
+              <div class="badge-group">
+                <span class="badge ${el.voting_open ? 'open' : 'closed'}">${el.voting_open ? 'ACTIVE' : 'CONCLUDED'}</span>
+                <span class="badge" style="background-color: rgba(255, 255, 255, 0.05); color: var(--text-primary);">${el.voted_count} votes cast</span>
+                <span class="badge" style="background-color: rgba(208, 188, 255, 0.1); color: var(--primary-color);">${timeStr}</span>
+              </div>
+            `;
+            
+            card.addEventListener('click', () => {
+              if (!el.voting_open) {
+                alertDiv.innerText = "This election session has already concluded.";
+                alertDiv.style.display = 'block';
+                return;
+              }
+              selectElection(el.id, el.title);
+            });
+            
+            card.addEventListener('keydown', (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                card.click();
+              }
+            });
+
+            container.appendChild(card);
+          });
+        })
+        .catch(err => {
+          console.error(err);
+          container.innerHTML = '<p style="text-align: center; color: var(--text-error); padding: 2rem;">Failed to load ongoing votes. Please check connection.</p>';
+        });
+    }
+
+    function selectElection(id, title) {
+      window.selectedElectionId = id;
+      document.getElementById('verify_header_title').innerText = title;
+      document.getElementById('verify_header_subtitle').innerText = "Voter authentication card for: " + title;
+      navigateToScreen(1);
+    }
+
     // Initialize SPA on start
     window.addEventListener('DOMContentLoaded', () => {
-      navigateToScreen(1);
+      navigateToScreen(0);
       startStatusPolling();
     });
 
@@ -224,7 +318,8 @@
       if (pollingInterval) clearInterval(pollingInterval);
       
       const checkStatus = () => {
-        fetch('/status')
+        if (!window.selectedElectionId) return;
+        fetch(`/status?election_id=${window.selectedElectionId}`)
           .then(res => res.json())
           .then(data => {
             if (data.voting_open === false) {
@@ -252,13 +347,19 @@
       const roll = document.getElementById('input_roll').value.trim();
       if (!roll) return;
 
+      if (!window.selectedElectionId) {
+        alertDiv.innerText = "No selection context. Back onto votes page.";
+        alertDiv.style.display = 'block';
+        return;
+      }
+
       const spinner = document.getElementById('spinner_s1');
       spinner.style.display = 'inline-block';
 
       fetch('/auth/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roll: roll })
+        body: JSON.stringify({ roll: roll, election_id: window.selectedElectionId })
       })
       .then(async res => {
         spinner.style.display = 'none';

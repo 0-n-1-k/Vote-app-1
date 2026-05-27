@@ -12,9 +12,11 @@ import androidx.room.RoomDatabase
         VotedRollEntity::class,
         ConfigEntity::class,
         ManagementAuthEntity::class,
-        ConfirmNonceEntity::class
+        ConfirmNonceEntity::class,
+        ElectionEntity::class,
+        VotingOptionEntity::class
     ],
-    version = 1,
+    version = 3,
     exportSchema = false
 )
 abstract class AppDatabase : RoomDatabase() {
@@ -24,6 +26,8 @@ abstract class AppDatabase : RoomDatabase() {
     abstract fun configDao(): ConfigDao
     abstract fun managementAuthDao(): ManagementAuthDao
     abstract fun confirmNonceDao(): ConfirmNonceDao
+    abstract fun electionDao(): ElectionDao
+    abstract fun votingOptionDao(): VotingOptionDao
 
     companion object {
         @Volatile

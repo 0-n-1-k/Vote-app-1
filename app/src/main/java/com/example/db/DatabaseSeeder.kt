@@ -3,7 +3,7 @@ package com.example.db
 import android.content.Context
 import android.util.Log
 import androidx.room.withTransaction
-import com.example.security.BCrypt
+import org.mindrot.jbcrypt.BCrypt
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import java.io.BufferedReader
@@ -96,6 +96,17 @@ object DatabaseSeeder {
                     val hashed = BCrypt.hashpw(plainPass, salt) ?: throw IllegalStateException("BCrypt hashing failed")
                     
                     authDao.insertManagementAuth(ManagementAuthEntity(roll, hashed))
+                }
+
+                // Create a default election if none exists in database
+                val electionDao = database.electionDao()
+                if (electionDao.getAllElections().isEmpty()) {
+                    val defaultElection = ElectionEntity(
+                        title = "General Layout Design Election",
+                        endsAt = System.currentTimeMillis() / 1000 + 86400 * 3, // 3 days from now
+                        createdAt = System.currentTimeMillis() / 1000
+                    )
+                    electionDao.insertElection(defaultElection)
                 }
 
                 // Insert Configs
