@@ -214,38 +214,68 @@
 
       <!-- Live Temporal Adjustment Control Panel -->
       <div style="background-color: rgba(255, 255, 255, 0.02); border: 1px solid var(--surface-border); padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem;">
-        <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--primary-color);">Time Control Panel</h3>
-        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.25rem;">Instantly extend or reduce the remaining voting duration for this specific session.</p>
-        
-        <div style="display: flex; gap: 1rem; flex-wrap: wrap;">
-          <button class="btn btn-secondary" onclick="adjustTime(300)" style="width: auto; padding: 0.5rem 1rem; margin-top: 0; border-color: rgba(16, 185, 129, 0.4); color: var(--success-color);">
-            +5 Minutes
-          </button>
-          <button class="btn btn-secondary" onclick="adjustTime(1800)" style="width: auto; padding: 0.5rem 1rem; margin-top: 0; border-color: rgba(16, 185, 129, 0.4); color: var(--success-color);">
-            +30 Minutes
-          </button>
-          <button class="btn btn-secondary" onclick="adjustTime(3600)" style="width: auto; padding: 0.5rem 1rem; margin-top: 0; border-color: rgba(16, 185, 129, 0.4); color: var(--success-color);">
-            +1 Hour
-          </button>
-          <button class="btn btn-secondary" onclick="adjustTime(-300)" style="width: auto; padding: 0.5rem 1rem; margin-top: 0; border-color: rgba(239, 68, 68, 0.3); color: var(--text-error);">
-            -5 Minutes
-          </button>
-          <button class="btn btn-secondary" onclick="adjustTime(-1800)" style="width: auto; padding: 0.5rem 1rem; margin-top: 0; border-color: rgba(239, 68, 68, 0.3); color: var(--text-error);">
-            -30 Minutes
-          </button>
-          <button class="btn btn-secondary" onclick="adjustTime(-3600)" style="width: auto; padding: 0.5rem 1rem; margin-top: 0; border-color: rgba(239, 68, 68, 0.3); color: var(--text-error);">
-            -1 Hour
-          </button>
+        <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--primary-color);">Configure Session Period</h3>
+        <p style="color: var(--text-secondary); font-size: 0.9rem; margin-bottom: 1.25rem;">
+          Specify the precise expiration timestamp. The system will hard-lock the active session window immediately after this period elapses.
+        </p>
+
+        <!-- Current End Time Display -->
+        <div style="display: flex; flex-direction: column; gap: 0.5rem; background: rgba(59, 130, 246, 0.05); padding: 1rem; border-radius: 8px; border: 1px dashed rgba(59, 130, 246, 0.2); margin-bottom: 1.5rem;">
+          <span style="font-size: 0.8rem; color: var(--text-secondary); font-weight: 500; text-transform: uppercase;">Current Expiration Window</span>
+          <span id="display_exact_end_time" style="font-size: 1.2rem; font-weight: 700; color: var(--primary-color);">Loading...</span>
         </div>
-        
-        <div style="margin-top: 1.5rem; border-top: 1px solid rgba(255, 255, 255, 0.05); padding-top: 1rem; display: flex; gap: 1rem; align-items: flex-end; flex-wrap: wrap;">
-          <div style="flex: 1; min-width: 200px;">
-            <label for="custom_adj_minutes" style="font-size: 0.8rem; color: var(--text-secondary); display: block; margin-bottom: 0.25rem;">Custom Time Adjustment (Minutes)</label>
-            <input type="number" id="custom_adj_minutes" placeholder="e.g. 15 (use negative, e.g. -15, to subtract)" style="width: 100%; padding: 0.6rem 0.8rem; font-size: 0.95rem; background-color: var(--bg-color); border: 1px solid var(--surface-border); border-radius: 8px; color: var(--text-primary);">
+
+        <!-- Incremental Time adjustments -->
+        <div style="margin-bottom: 1.5rem; background: rgba(255, 255, 255, 0.01); border: 1px solid var(--surface-border); padding: 1rem; border-radius: 8px;">
+          <span style="font-size: 0.80rem; color: var(--text-secondary); font-weight: 600; display: block; margin-bottom: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em;">Incremental Time Adjustments (Add or Remove)</span>
+          <div style="display: flex; gap: 0.5rem; flex-wrap: wrap; align-items: center;">
+            <button class="btn" onclick="adjustTime(-300)" style="width: auto; margin-top: 0; padding: 0.4rem 0.8rem; font-size: 0.85rem; background-color: rgba(239, 68, 68, 0.08); color: var(--text-error); border: 1px solid rgba(239, 68, 68, 0.2); font-weight: 600; cursor: pointer;">-5m</button>
+            <button class="btn" onclick="adjustTime(-1800)" style="width: auto; margin-top: 0; padding: 0.4rem 0.8rem; font-size: 0.85rem; background-color: rgba(239, 68, 68, 0.08); color: var(--text-error); border: 1px solid rgba(239, 68, 68, 0.2); font-weight: 600; cursor: pointer;">-30m</button>
+            <button class="btn" onclick="adjustTime(-3600)" style="width: auto; margin-top: 0; padding: 0.4rem 0.8rem; font-size: 0.85rem; background-color: rgba(239, 68, 68, 0.08); color: var(--text-error); border: 1px solid rgba(239, 68, 68, 0.2); font-weight: 600; cursor: pointer;">-1h</button>
+            <button class="btn" onclick="adjustTime(-86400)" style="width: auto; margin-top: 0; padding: 0.4rem 0.8rem; font-size: 0.85rem; background-color: rgba(239, 68, 68, 0.08); color: var(--text-error); border: 1px solid rgba(239, 68, 68, 0.2); font-weight: 600; cursor: pointer;">-1d</button>
+            
+            <div style="height: 1.5rem; width: 1px; background-color: var(--surface-border); margin: 0 0.25rem;"></div>
+            
+            <button class="btn" onclick="adjustTime(300)" style="width: auto; margin-top: 0; padding: 0.4rem 0.8rem; font-size: 0.85rem; background-color: rgba(16, 185, 129, 0.08); color: var(--success-color); border: 1px solid rgba(16, 185, 129, 0.2); font-weight: 600; cursor: pointer;">+5m</button>
+            <button class="btn" onclick="adjustTime(1800)" style="width: auto; margin-top: 0; padding: 0.4rem 0.8rem; font-size: 0.85rem; background-color: rgba(16, 185, 129, 0.08); color: var(--success-color); border: 1px solid rgba(16, 185, 129, 0.2); font-weight: 600; cursor: pointer;">+30m</button>
+            <button class="btn" onclick="adjustTime(3600)" style="width: auto; margin-top: 0; padding: 0.4rem 0.8rem; font-size: 0.85rem; background-color: rgba(16, 185, 129, 0.08); color: var(--success-color); border: 1px solid rgba(16, 185, 129, 0.2); font-weight: 600; cursor: pointer;">+1h</button>
+            <button class="btn" onclick="adjustTime(86400)" style="width: auto; margin-top: 0; padding: 0.4rem 0.8rem; font-size: 0.85rem; background-color: rgba(16, 185, 129, 0.08); color: var(--success-color); border: 1px solid rgba(16, 185, 129, 0.2); font-weight: 600; cursor: pointer;">+1d</button>
           </div>
-          <button class="btn btn-primary" onclick="handleCustomTimeAdjustment()" style="width: auto; margin-top: 0; height: 38px; padding: 0 1.25rem; font-size: 0.95rem;">
-            Apply Adjust
+        </div>
+
+        <!-- Custom End Time Form -->
+        <div style="display: flex; gap: 1rem; flex-wrap: wrap; margin-bottom: 1.25rem;">
+          <div style="flex: 1; min-width: 180px;">
+            <label for="input_exact_date" style="font-size: 0.8rem; color: var(--text-secondary); display: block; margin-bottom: 0.5rem;">Expiry Date</label>
+            <input type="date" id="input_exact_date" oninput="onExactTimeInputChange()" style="width: 100%; padding: 0.6rem 0.8rem; font-size: 0.95rem; background-color: var(--bg-color); border: 1px solid var(--surface-border); border-radius: 8px; color: var(--text-primary); cursor: pointer;">
+          </div>
+          <div style="flex: 1; min-width: 140px;">
+            <label for="input_exact_time" style="font-size: 0.8rem; color: var(--text-secondary); display: block; margin-bottom: 0.5rem;">Expiry Time (Hours & Minutes)</label>
+            <input type="time" id="input_exact_time" oninput="onExactTimeInputChange()" style="width: 100%; padding: 0.6rem 0.8rem; font-size: 0.95rem; background-color: var(--bg-color); border: 1px solid var(--surface-border); border-radius: 8px; color: var(--text-primary); cursor: pointer;">
+          </div>
+        </div>
+
+        <!-- Display String Format Preview -->
+        <div style="margin-bottom: 1.5rem; font-size: 0.9rem; padding: 0.75rem; border-radius: 6px; background-color: rgba(255,255,255,0.01); border: 1px solid rgba(255,255,255,0.03);">
+          <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 0.5rem;">
+            <div>
+              <span style="color: var(--text-secondary);">Target Expiry Format: </span>
+              <strong id="label_exact_preview" style="color: var(--text-primary); font-family: monospace;">--:-- -- --/--/----</strong>
+            </div>
+            <div id="status_lock_indicator" style="font-size: 0.8rem; font-weight: 600; padding: 0.25rem 0.5rem; border-radius: 4px; display: inline-block; background-color: rgba(255,255,255,0.05); color: var(--text-secondary);">
+              No Date Selected
+            </div>
+          </div>
+        </div>
+
+        <div style="display: flex; gap: 1rem; align-items: center; flex-wrap: wrap;">
+          <button class="btn btn-primary" id="btn_apply_exact_period" onclick="applyExactPeriod()" style="width: auto; margin-top: 0; padding: 0.6rem 1.5rem; font-size: 0.95rem;" disabled>
+            Save Expiration Period
           </button>
+          
+          <span style="color: var(--text-secondary); font-size: 0.85rem;">
+            (System Server Current Time: <span id="display_server_current_time" style="font-weight: 500; color: var(--text-primary);">--:--</span>)
+          </span>
         </div>
       </div>
 
@@ -410,6 +440,146 @@
     let pollDiagnosticTimer = null;
     let selectedAdminElectionId = null;
     let currentElectionOptions = []; // Hold list of { id, option_text, image_data } for currently selected election
+    let latestServerTimeEpoch = 0;
+
+    function formatEpochToExact(epochSec) {
+      if (!epochSec || epochSec <= 0) return "Not Set";
+      const d = new Date(epochSec * 1000);
+      
+      let hours = d.getHours();
+      const minutes = d.getMinutes().toString().padStart(2, '0');
+      const ampm = hours >= 12 ? 'PM' : 'AM';
+      hours = hours % 12;
+      hours = hours ? hours : 12;
+      
+      const day = d.getDate().toString().padStart(2, '0');
+      const month = (d.getMonth() + 1).toString().padStart(2, '0');
+      const year = d.getFullYear();
+      
+      return `${hours}:${minutes} ${ampm} ${day}/${month}/${year}`;
+    }
+
+    function onExactTimeInputChange() {
+      const dateIn = document.getElementById('input_exact_date').value;
+      const timeIn = document.getElementById('input_exact_time').value;
+      const btn = document.getElementById('btn_apply_exact_period');
+      const preview = document.getElementById('label_exact_preview');
+      const indicator = document.getElementById('status_lock_indicator');
+
+      if (!dateIn || !timeIn) {
+        if (btn) btn.disabled = true;
+        if (preview) preview.innerText = "--:-- -- --/--/----";
+        if (indicator) {
+          indicator.innerText = "Incomplete Parameters";
+          indicator.style.backgroundColor = "rgba(255,255,255,0.05)";
+          indicator.style.color = "var(--text-secondary)";
+        }
+        return;
+      }
+
+      const parts = dateIn.split('-');
+      const year = parseInt(parts[0]);
+      const month = parseInt(parts[1]) - 1;
+      const day = parseInt(parts[2]);
+
+      const timeParts = timeIn.split(':');
+      const hours = parseInt(timeParts[0]);
+      const minutes = parseInt(timeParts[1]);
+
+      const targetDate = new Date(year, month, day, hours, minutes, 0, 0);
+      const targetEpoch = Math.floor(targetDate.getTime() / 1000);
+
+      let dispHours = hours;
+      const ampm = dispHours >= 12 ? 'PM' : 'AM';
+      dispHours = dispHours % 12;
+      dispHours = dispHours ? dispHours : 12;
+      const dispMinutes = minutes.toString().padStart(2, '0');
+      const dispDay = day.toString().padStart(2, '0');
+      const dispMonth = (month + 1).toString().padStart(2, '0');
+      
+      const formattedStr = `${dispHours}:${dispMinutes} ${ampm} ${dispDay}/${dispMonth}/${year}`;
+      if (preview) preview.innerText = formattedStr;
+
+      const nowS = latestServerTimeEpoch || Math.floor(Date.now() / 1000);
+
+      if (targetEpoch <= nowS) {
+        if (btn) btn.disabled = true;
+        if (indicator) {
+          indicator.innerText = "❌ Hard Locked: Cannot set back in time";
+          indicator.style.backgroundColor = "rgba(239, 68, 68, 0.15)";
+          indicator.style.color = "var(--text-error)";
+        }
+      } else {
+        if (btn) btn.disabled = false;
+        if (indicator) {
+          indicator.innerText = "✅ Valid Future Period";
+          indicator.style.backgroundColor = "rgba(16, 185, 129, 0.15)";
+          indicator.style.color = "var(--success-color)";
+        }
+      }
+    }
+
+    function applyExactPeriod() {
+      if (!selectedAdminElectionId) return;
+      
+      const dateIn = document.getElementById('input_exact_date').value;
+      const timeIn = document.getElementById('input_exact_time').value;
+      if (!dateIn || !timeIn) return;
+
+      const parts = dateIn.split('-');
+      const year = parseInt(parts[0]);
+      const month = parseInt(parts[1]) - 1;
+      const day = parseInt(parts[2]);
+
+      const timeParts = timeIn.split(':');
+      const hours = parseInt(timeParts[0]);
+      const minutes = parseInt(timeParts[1]);
+
+      const targetDate = new Date(year, month, day, hours, minutes, 0, 0);
+      const targetEpoch = Math.floor(targetDate.getTime() / 1000);
+
+      const bannerErr = document.getElementById('admin_error_banner');
+      const bannerAlert = document.getElementById('admin_alert_banner');
+      if (bannerErr) bannerErr.style.display = 'none';
+      if (bannerAlert) bannerAlert.style.display = 'none';
+
+      const btn = document.getElementById('btn_apply_exact_period');
+      if (btn) btn.disabled = true;
+
+      fetch('/admin/elections/adjust-time', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ election_id: selectedAdminElectionId, ends_at: targetEpoch })
+      })
+      .then(async res => {
+        if (btn) btn.disabled = false;
+        if (res.status === 200) {
+          if (bannerAlert) {
+            bannerAlert.innerText = "Election period successfully updated!";
+            bannerAlert.style.display = 'block';
+            setTimeout(() => bannerAlert.style.display = 'none', 4000);
+          }
+          document.getElementById('input_exact_date').value = '';
+          document.getElementById('input_exact_time').value = '';
+          queryDiagnosticStats();
+        } else {
+          try {
+            const errData = await res.json();
+            if (bannerErr) bannerErr.innerText = errData.error || "Failed to update period.";
+          } catch {
+            if (bannerErr) bannerErr.innerText = "Failure updating election expiration period.";
+          }
+          if (bannerErr) bannerErr.style.display = 'block';
+        }
+      })
+      .catch(() => {
+        if (btn) btn.disabled = false;
+        if (bannerErr) {
+          bannerErr.innerText = "Network transmission failed.";
+          bannerErr.style.display = 'block';
+        }
+      });
+    }
 
     function loadSelectedElectionOptions(callback) {
       if (!selectedAdminElectionId) {
@@ -433,7 +603,7 @@
     // Run verification status checks
     window.addEventListener('DOMContentLoaded', () => {
       // Check if session token exists
-      fetch('/admin/status')
+      fetch(`/admin/status?_t=${Date.now()}`)
         .then(res => {
           if (res.status === 200) {
             showDashboardPanel();
@@ -503,7 +673,7 @@
       const listContainer = document.getElementById('admin_elections_list');
       listContainer.innerHTML = '<p style="color: var(--text-secondary); text-align: center; padding: 2rem;">Loading ongoing votes...</p>';
 
-      fetch('/api/elections')
+      fetch(`/api/elections?_t=${Date.now()}`)
         .then(res => res.json())
         .then(data => {
           listContainer.innerHTML = '';
@@ -876,18 +1046,6 @@
       });
     }
 
-    // -- Custom Time Control --
-    function handleCustomTimeAdjustment() {
-      const minutesInput = document.getElementById('custom_adj_minutes');
-      const minutes = parseInt(minutesInput.value);
-      if (isNaN(minutes) || minutes === 0) {
-        alert("Please enter a valid non-zero number of minutes.");
-        return;
-      }
-      adjustTime(minutes * 60);
-      minutesInput.value = '';
-    }
-
     // ADJUST TIME LIMITS
     function adjustTime(deltaSeconds) {
       if (!selectedAdminElectionId) return;
@@ -973,7 +1131,7 @@
       if (!selectedAdminElectionId) return;
 
       // 1. Fetch system status
-      fetch(`/admin/status?election_id=${selectedAdminElectionId}`)
+      fetch(`/admin/status?election_id=${selectedAdminElectionId}&_t=${Date.now()}`)
         .then(async res => {
           if (res.status === 200) {
             const data = await res.json();
@@ -992,6 +1150,32 @@
 
             document.getElementById('stat_total_voters').innerText = data.total_voters;
             document.getElementById('stat_voted_count').innerText = data.voted_count;
+
+            latestServerTimeEpoch = data.server_time || Math.floor(Date.now() / 1000);
+
+            if (document.getElementById('display_exact_end_time')) {
+              document.getElementById('display_exact_end_time').innerText = formatEpochToExact(data.ends_at);
+            }
+            if (document.getElementById('display_server_current_time')) {
+              document.getElementById('display_server_current_time').innerText = formatEpochToExact(data.server_time);
+            }
+
+            // Dynamically check and lock the time input form state
+            if (document.activeElement !== document.getElementById('input_exact_date') && 
+                document.activeElement !== document.getElementById('input_exact_time')) {
+              if (data.ends_at && data.ends_at > 0) {
+                const d = new Date(data.ends_at * 1000);
+                const year = d.getFullYear();
+                const month = (d.getMonth() + 1).toString().padStart(2, '0');
+                const day = d.getDate().toString().padStart(2, '0');
+                const hours = d.getHours().toString().padStart(2, '0');
+                const minutes = d.getMinutes().toString().padStart(2, '0');
+
+                document.getElementById('input_exact_date').value = `${year}-${month}-${day}`;
+                document.getElementById('input_exact_time').value = `${hours}:${minutes}`;
+              }
+            }
+            onExactTimeInputChange();
 
             // Direct result unlocking check
             if (remaining === 0) {

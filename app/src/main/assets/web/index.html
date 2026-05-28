@@ -212,6 +212,8 @@
 
     // Structural Zero-Trust Routing Guards
     function navigateToScreen(targetScreenId) {
+      window.currentScreenId = targetScreenId;
+
       if (targetScreenId === 1 && !window.selectedElectionId) {
         targetScreenId = 0; // Return to selection list if there is no selected election
       }
@@ -236,15 +238,50 @@
     }
 
     // Load available elections from backend
+    let lastElectionsDataJson = "";
     function fetchElections() {
       const container = document.getElementById('elections_container');
       const alertDiv = document.getElementById('alert_s0');
-      alertDiv.style.display = 'none';
-      container.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 2rem;">Loading ongoing votes...</p>';
+      
+      if (!container.children.length || container.innerHTML.includes("Loading ongoing votes...")) {
+        alertDiv.style.display = 'none';
+        container.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 2rem;">Loading ongoing votes...</p>';
+      }
 
-      fetch('/api/elections')
+      fetch(`/api/elections?_t=${Date.now()}`)
         .then(res => res.json())
         .then(data => {
+          // Compare structural data to avoid flickering/frequent full redrawing
+          const listToCompare = data.map(el => ({ id: el.id, title: el.title, ends_at: el.ends_at, voting_open: el.voting_open, voted_count: el.voted_count }));
+          const dataToCompareJson = JSON.stringify(listToCompare);
+          
+          if (dataToCompareJson === lastElectionsDataJson) {
+            // No structural change. Only update remaining timer count badge elements dynamically.
+            data.forEach(el => {
+              const remainingBadge = document.getElementById(`remaining_badge_${el.id}`);
+              if (remainingBadge) {
+                let timeStr = 'Concluded';
+                if (el.voting_open) {
+                  const hours = Math.floor(el.time_remaining_seconds / 3600);
+                  const mins = Math.floor((el.time_remaining_seconds % 3600) / 60);
+                  timeStr = hours > 0 ? `${hours}h ${mins}m remaining` : `${mins}m remaining`;
+                }
+                remainingBadge.innerText = timeStr;
+              }
+              const countBadge = document.getElementById(`count_badge_${el.id}`);
+              if (countBadge) {
+                countBadge.innerText = `${el.voted_count} votes cast`;
+              }
+              const statusBadge = document.getElementById(`status_badge_${el.id}`);
+              if (statusBadge) {
+                statusBadge.innerText = el.voting_open ? 'ACTIVE' : 'CONCLUDED';
+                statusBadge.className = `badge ${el.voting_open ? 'open' : 'closed'}`;
+              }
+            });
+            return;
+          }
+          lastElectionsDataJson = dataToCompareJson;
+
           container.innerHTML = '';
           if (data.length === 0) {
             container.innerHTML = '<p style="text-align: center; color: var(--text-secondary); padding: 2rem;">No active votes or sessions found at this time.</p>';
@@ -268,9 +305,9 @@
               <h3 style="margin-bottom: 0.5rem; color: var(--primary-color);">${el.title}</h3>
               <p style="font-size: 0.9rem; color: var(--text-secondary); margin-bottom: 1rem;">Click to participate and cast your layout choices.</p>
               <div class="badge-group">
-                <span class="badge ${el.voting_open ? 'open' : 'closed'}">${el.voting_open ? 'ACTIVE' : 'CONCLUDED'}</span>
-                <span class="badge" style="background-color: rgba(255, 255, 255, 0.05); color: var(--text-primary);">${el.voted_count} votes cast</span>
-                <span class="badge" style="background-color: rgba(208, 188, 255, 0.1); color: var(--primary-color);">${timeStr}</span>
+                <span id="status_badge_${el.id}" class="badge ${el.voting_open ? 'open' : 'closed'}">${el.voting_open ? 'ACTIVE' : 'CONCLUDED'}</span>
+                <span id="count_badge_${el.id}" class="badge" style="background-color: rgba(255, 255, 255, 0.05); color: var(--text-primary);">${el.voted_count} votes cast</span>
+                <span id="remaining_badge_${el.id}" class="badge" style="background-color: rgba(208, 188, 255, 0.1); color: var(--primary-color);">${timeStr}</span>
               </div>
             `;
             
@@ -312,14 +349,19 @@
       startStatusPolling();
     });
 
-    // Background HTTP status checking loop (GET /status every 60s)
+    // Background HTTP status checking loop (GET /status every 3s)
     let pollingInterval = null;
     function startStatusPolling() {
       if (pollingInterval) clearInterval(pollingInterval);
       
       const checkStatus = () => {
-        if (!window.selectedElectionId) return;
-        fetch(`/status?election_id=${window.selectedElectionId}`)
+        // If we are on the selection screen, poll the elections list
+        if (window.currentScreenId === 0 || !window.selectedElectionId) {
+          fetchElections();
+          return;
+        }
+
+        fetch(`/status?election_id=${window.selectedElectionId}&_t=${Date.now()}`)
           .then(res => res.json())
           .then(data => {
             if (data.voting_open === false) {
@@ -329,13 +371,17 @@
               window.currentConfirmNonceToken = null;
               window.userSelectionCache = null;
               navigateToScreen('locked');
+            } else if (window.currentScreenId === 'locked' && data.voting_open === true) {
+              // Re-opened/extended state jump: navigate back to selection
+              window.selectedElectionId = null;
+              navigateToScreen(0);
             }
           })
           .catch(err => console.error("Status polling exception", err));
       };
 
       checkStatus();
-      pollingInterval = setInterval(checkStatus, 60000); // Strict 60s loop config
+      pollingInterval = setInterval(checkStatus, 3000); // Strict 3s loop config
     }
 
     // Screen 1 Action -> Verify roll alphanumeric ID

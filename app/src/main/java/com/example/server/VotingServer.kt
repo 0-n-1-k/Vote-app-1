@@ -41,7 +41,7 @@ object VotingServer {
     private const val TAG = "VotingServer"
     private var server: HttpServer? = null
     private val scope = CoroutineScope(Dispatchers.IO)
-    private val serverExecutor = Executors.newSingleThreadExecutor() // Guarantees single-process synchronous DB execution safety!
+    private val serverExecutor = Executors.newFixedThreadPool(8) // Multi-threaded executor prevents blocking/bottlenecking of parallel requests
 
     // Logs flow for display inside the Android App's dashboard console
     private val _logsFlow = MutableStateFlow<List<String>>(emptyList())
@@ -346,6 +346,9 @@ object VotingServer {
                 exchange.responseHeaders.set("Access-Control-Allow-Credentials", "true")
                 exchange.responseHeaders.set("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
                 exchange.responseHeaders.set("Access-Control-Allow-Headers", "Content-Type, Authorization, Cookie")
+                exchange.responseHeaders.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
+                exchange.responseHeaders.set("Pragma", "no-cache")
+                exchange.responseHeaders.set("Expires", "0")
                 exchange.sendResponseHeaders(statusCode, bytes.size.toLong())
                 exchange.responseBody.use { it.write(bytes) }
             } catch (e: Exception) {
@@ -372,12 +375,12 @@ object VotingServer {
             return JwtHelper.verifyToken(token, jwtSecret)
         }
 
-        private fun getElectionWindowSettings(electionId: Long): Pair<Boolean, Long> = runBlocking {
-            val election = db.electionDao().getElectionById(electionId) ?: return@runBlocking Pair(false, 0L)
+        private suspend fun getElectionWindowSettings(electionId: Long): Pair<Boolean, Long> {
+            val election = db.electionDao().getElectionById(electionId) ?: return Pair(false, 0L)
             val nowSeconds = Instant.now().epochSecond
             val remaining = maxOf(0L, election.endsAt - nowSeconds)
             val finalOpenStatus = remaining > 0
-            Pair(finalOpenStatus, remaining)
+            return Pair(finalOpenStatus, remaining)
         }
 
         private fun handleElectionsList(exchange: HttpExchange) = runBlocking {
@@ -765,6 +768,8 @@ object VotingServer {
                 put("time_remaining_seconds", remaining)
                 put("total_voters", totalVotersCount)
                 put("voted_count", votedCount)
+                put("ends_at", election?.endsAt ?: 0L)
+                put("server_time", nowSeconds)
             }
             sendResponse(exchange, 200, json.toString())
         }
@@ -963,9 +968,10 @@ object VotingServer {
                 val json = JSONObject(body)
                 val electionId = json.optLong("election_id", -1L)
                 val deltaSeconds = json.optLong("delta_seconds", 0L)
+                val endsAt = json.optLong("ends_at", -1L)
 
-                if (electionId == -1L || deltaSeconds == 0L) {
-                    sendResponse(exchange, 400, "{\"error\": \"Invalid parameters\"}")
+                if (electionId == -1L || (deltaSeconds == 0L && endsAt == -1L)) {
+                    sendResponse(exchange, 400, "{\"error\": \"Invalid parameters: must specify election_id and either delta_seconds or ends_at\"}")
                     return@runBlocking
                 }
 
@@ -976,13 +982,23 @@ object VotingServer {
                 }
 
                 val nowSeconds = java.time.Instant.now().epochSecond
-                val currentRemaining = election.endsAt - nowSeconds
-                val baseTime = if (currentRemaining > 0) election.endsAt else nowSeconds
-                election.endsAt = maxOf(nowSeconds, baseTime + deltaSeconds)
+
+                if (endsAt != -1L) {
+                    if (endsAt <= nowSeconds) {
+                        sendResponse(exchange, 400, "{\"error\": \"The chosen end time must be in the future relative to the current server time.\"}")
+                        return@runBlocking
+                    }
+                    election.endsAt = endsAt
+                    addLog("ADMIN EVENT: Set exact end time of election ID $electionId to $endsAt")
+                } else {
+                    val currentRemaining = election.endsAt - nowSeconds
+                    val baseTime = if (currentRemaining > 0) election.endsAt else nowSeconds
+                    election.endsAt = maxOf(nowSeconds, baseTime + deltaSeconds)
+                    addLog("ADMIN EVENT: Adjusted remaining time of election ID $electionId by $deltaSeconds seconds")
+                }
 
                 db.electionDao().updateElection(election)
 
-                addLog("ADMIN EVENT: Adjusted remaining time of election ID $electionId by $deltaSeconds seconds")
                 sendResponse(exchange, 200, "{\"ok\": true, \"new_ends_at\": ${election.endsAt}}")
             } catch (e: Exception) {
                 sendResponse(exchange, 500, "{\"error\": \"Failed to adjust election time: ${e.message}\"}")
