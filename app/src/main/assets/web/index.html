@@ -10,8 +10,13 @@
 
   <!-- Screen 0: Ongoing Votes Selection -->
   <div id="screen_0" class="spa-screen active">
-    <h1>Ongoing Votes</h1>
-    <p class="subtitle">Select the election or legislative proposal you wish to participate in.</p>
+    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 0.5rem; flex-wrap: wrap; gap: 0.5rem;">
+      <h1 style="margin: 0;">Ongoing Votes</h1>
+      <button type="button" class="btn" style="width: auto; margin: 0; padding: 0.4rem 0.8rem; font-size: 0.85rem; border: 1px solid var(--primary-color); background: rgba(208, 188, 255, 0.05); color: var(--primary-color); display: inline-flex; align-items: center; gap: 0.35rem; cursor: pointer; border-radius: 8px;" onclick="fetchElections()">
+        🔄 Refresh
+      </button>
+    </div>
+    <p class="subtitle" style="margin-top: 0;">Select the election or legislative proposal you wish to participate in.</p>
     
     <div id="alert_s0" class="alert-container" aria-live="assertive"></div>
     
@@ -34,9 +39,6 @@
       <button type="submit" id="btn_verify_roll" class="btn btn-primary">
         Verify Roll ID <div id="spinner_s1" class="spinner"></div>
       </button>
-      <button type="button" onclick="navigateToScreen(0)" class="btn btn-secondary">
-        &larr; Back to ongoing votes
-      </button>
     </form>
   </div>
 
@@ -47,13 +49,18 @@
 
     <div id="alert_s2" class="alert-container" aria-live="assertive"></div>
 
-    <div style="background-color: var(--bg-color); border: 1px solid var(--surface-border); padding: 1.5rem; border-radius: 8px; margin-bottom: 2rem; font-size: 1.1rem; line-height: 1.6;">
+    <div style="background-color: var(--bg-color); border: 1px solid var(--surface-border); padding: 1.5rem; border-radius: 8px; margin-bottom: 1.5rem; font-size: 1.1rem; line-height: 1.6;">
       You are: <strong id="confirm_name_text" style="color: var(--primary-color);"></strong> <br>
       Roll ID: <strong id="confirm_roll_text"></strong>
     </div>
 
+    <!-- Identity Warning Message Prompt -->
+    <div style="background-color: rgba(239, 68, 68, 0.08); border: 1px solid rgba(239, 68, 68, 0.25); color: var(--text-error); padding: 1rem; border-radius: 6px; margin-bottom: 2rem; font-size: 0.95rem; font-weight: 600; line-height: 1.4;">
+      Beware you can only login once, make sure your identity is correct
+    </div>
+
     <button type="button" onclick="handleConfirmIdentity(true)" class="btn btn-primary">
-      Yes, proceed <div id="spinner_s2" class="spinner"></div>
+      Yes, confirm & login <div id="spinner_s2" class="spinner"></div>
     </button>
     <button type="button" onclick="handleConfirmIdentity(false)" class="btn btn-secondary">
       No, re-enter roll
@@ -188,6 +195,9 @@
       <div class="success-icon" aria-hidden="true">&#10004;</div>
       <h1>Congratulations!</h1>
       <p class="subtitle" id="congrats_message" style="margin-bottom: 0;">Your votes have been submitted.</p>
+      <button type="button" onclick="returnToElectionList()" class="btn btn-primary" style="margin-top: 2rem; max-width: 250px;">
+        Back to Election List
+      </button>
     </div>
   </div>
 
@@ -210,17 +220,43 @@
     window.userSelectionCache = null;
     window.hasAttemptedSubmit = false;
 
+    function returnToElectionList() {
+      window.selectedElectionId = null;
+      window.userSelectionCache = null;
+      window.hasAttemptedSubmit = false;
+      const savedRoll = localStorage.getItem('voter_roll');
+      if (savedRoll) {
+        navigateToScreen(2);
+        fetchElections();
+      } else {
+        navigateToScreen(1);
+      }
+    }
+
     // Structural Zero-Trust Routing Guards
     function navigateToScreen(targetScreenId) {
+      const savedRoll = localStorage.getItem('voter_roll');
+      if (!savedRoll) {
+        // Not logged in: only allow Screen 1 or Screen 2
+        if (targetScreenId !== 1 && targetScreenId !== 2) {
+          targetScreenId = 1;
+        }
+      } else {
+        // Logged in: block Screen 1 and Screen 2 (already permanently logged in)
+        if (targetScreenId === 1 || targetScreenId === 2) {
+          targetScreenId = 0;
+        }
+      }
+
       window.currentScreenId = targetScreenId;
 
-      if (targetScreenId === 1 && !window.selectedElectionId) {
-        targetScreenId = 0; // Return to selection list if there is no selected election
-      }
       if (targetScreenId === 3 && !window.currentConfirmNonceToken) {
-        targetScreenId = 1; // Kick back if token is missing
+        targetScreenId = 0; // Kick back to election list if token is missing
       }
-      if (targetScreenId === 4 && (!window.userSelectionCache || window.userSelectionCache.length !== 5)) {
+      const expectedSelectionLength = (window.activeCustomOptions && window.activeCustomOptions.length > 0)
+        ? window.activeCustomOptions.length
+        : 5;
+      if (targetScreenId === 4 && (!window.userSelectionCache || window.userSelectionCache.length !== expectedSelectionLength)) {
         targetScreenId = 3; // Force selection return if parameters are unverified
       }
 
@@ -338,14 +374,110 @@
 
     function selectElection(id, title) {
       window.selectedElectionId = id;
-      document.getElementById('verify_header_title').innerText = title;
-      document.getElementById('verify_header_subtitle').innerText = "Voter authentication card for: " + title;
-      navigateToScreen(1);
+      
+      const alertDiv = document.getElementById('alert_s0');
+      alertDiv.style.display = 'block';
+      alertDiv.style.backgroundColor = 'rgba(208, 188, 255, 0.1)';
+      alertDiv.style.borderColor = 'var(--primary-color)';
+      alertDiv.style.color = 'var(--primary-color)';
+      alertDiv.innerText = "Connecting to voting session. Please wait...";
+
+      const roll = localStorage.getItem('voter_roll');
+
+      // 1. Silent auth check & verify on server
+      fetch('/auth/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ roll: roll, election_id: id })
+      })
+      .then(async res => {
+        if (res.status === 200) {
+          const data = await res.json();
+          window.currentName = data.name;
+          window.currentRoll = roll;
+          window.currentConfirmNonceToken = data.confirm_nonce;
+
+          // 2. Clear block and confirm verification state for specific session JWT
+          return fetch('/auth/confirm', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ confirm_nonce: data.confirm_nonce })
+          });
+        } else {
+          let errMsg = null;
+          try {
+            const errData = await res.json();
+            errMsg = errData.error;
+          } catch (e) {}
+          throw new Error(errMsg || "Login failed with status " + res.status);
+        }
+      })
+      .then(async res => {
+        if (!res) return;
+        if (res.status === 200) {
+          const data = await res.json();
+          window.sessionToken = data.token;
+          
+          fetch(`/api/elections/options?election_id=${id}`)
+            .then(async optRes => {
+              if (optRes.status === 200) {
+                const options = await optRes.json();
+                window.activeCustomOptions = options;
+                if (options && options.length > 0) {
+                  renderCustomOptions(options);
+                } else {
+                  window.activeCustomOptions = null;
+                  renderDefaultOptions();
+                }
+              } else {
+                window.activeCustomOptions = null;
+                renderDefaultOptions();
+              }
+              alertDiv.style.display = 'none';
+              const titleHeader = document.getElementById('screen_3').querySelector('h1');
+              if (titleHeader) titleHeader.innerText = "Vote Proposal: " + title;
+              onVoteSelectionChanged();
+              navigateToScreen(3);
+            })
+            .catch(err => {
+              console.error(err);
+              window.activeCustomOptions = null;
+              renderDefaultOptions();
+              alertDiv.style.display = 'none';
+              const titleHeader = document.getElementById('screen_3').querySelector('h1');
+              if (titleHeader) titleHeader.innerText = "Vote Proposal: " + title;
+              onVoteSelectionChanged();
+              navigateToScreen(3);
+            });
+        } else {
+          let errMsg = null;
+          try {
+            const errData = await res.json();
+            errMsg = errData.error;
+          } catch (e) {}
+          throw new Error(errMsg || "System confirmation failed with status " + res.status);
+        }
+      })
+      .catch(err => {
+        console.error(err);
+        alertDiv.style.display = 'block';
+        alertDiv.style.backgroundColor = 'rgba(239, 68, 68, 0.1)';
+        alertDiv.style.borderColor = 'var(--text-error)';
+        alertDiv.style.color = 'var(--text-error)';
+        alertDiv.innerText = err.message || "Failed to initialize voting session secure access.";
+      });
     }
 
     // Initialize SPA on start
     window.addEventListener('DOMContentLoaded', () => {
-      navigateToScreen(0);
+      const savedRoll = localStorage.getItem('voter_roll');
+      if (savedRoll) {
+        window.currentRoll = savedRoll;
+        window.currentName = localStorage.getItem('voter_name');
+        navigateToScreen(0);
+      } else {
+        navigateToScreen(1);
+      }
       startStatusPolling();
     });
 
@@ -384,7 +516,7 @@
       pollingInterval = setInterval(checkStatus, 3000); // Strict 3s loop config
     }
 
-    // Screen 1 Action -> Verify roll alphanumeric ID
+     // Screen 1 Action -> Verify roll alphanumeric ID
     function handleRollSubmit(e) {
       e.preventDefault();
       const alertDiv = document.getElementById('alert_s1');
@@ -393,28 +525,21 @@
       const roll = document.getElementById('input_roll').value.trim();
       if (!roll) return;
 
-      if (!window.selectedElectionId) {
-        alertDiv.innerText = "No selection context. Back onto votes page.";
-        alertDiv.style.display = 'block';
-        return;
-      }
-
       const spinner = document.getElementById('spinner_s1');
       spinner.style.display = 'inline-block';
 
+      // Global check without specific election selection yet (-1)
       fetch('/auth/verify', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ roll: roll, election_id: window.selectedElectionId })
+        body: JSON.stringify({ roll: roll, election_id: -1 })
       })
       .then(async res => {
         spinner.style.display = 'none';
         if (res.status === 200) {
           const data = await res.json();
-          // Cache to volatile space memory
           window.currentName = data.name;
           window.currentRoll = roll;
-          window.currentConfirmNonceToken = data.confirm_nonce;
           
           // Display and navigate
           document.getElementById('confirm_name_text').innerText = data.name;
@@ -446,7 +571,6 @@
         // Yes, erase variables and load screen 1
         window.currentName = null;
         window.currentRoll = null;
-        window.currentConfirmNonceToken = null;
         document.getElementById('input_roll').value = '';
         navigateToScreen(1);
         return;
@@ -455,47 +579,269 @@
       const spinner = document.getElementById('spinner_s2');
       spinner.style.display = 'inline-block';
 
-      fetch('/auth/confirm', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ confirm_nonce: window.currentConfirmNonceToken })
-      })
-      .then(async res => {
-        spinner.style.display = 'none';
-        if (res.status === 200) {
-          // Success cookie is loaded, proceed to screen 3
-          navigateToScreen(3);
-        } else {
-          // Automated Fallback Recovery Path
-          let errorMsg = "Verification process validation failed.";
-          try {
-            const errData = await res.json();
-            errorMsg = errData.error || errorMsg;
-          } catch {}
-          
-          // Wipe, redirect to screen 1, show details
-          window.currentName = null;
-          window.currentRoll = null;
-          window.currentConfirmNonceToken = null;
-          
-          navigateToScreen(1);
-          const alertS1 = document.getElementById('alert_s1');
-          alertS1.innerText = errorMsg;
-          alertS1.style.display = 'block';
+      // Save credentials permanently inside local storage
+      localStorage.setItem('voter_roll', window.currentRoll);
+      localStorage.setItem('voter_name', window.currentName);
+
+      spinner.style.display = 'none';
+      
+      // Navigate to election list
+      navigateToScreen(0);
+    }
+
+    window.activeCustomOptions = null;
+
+    function renderDefaultOptions() {
+      const subtitle = document.getElementById('voting_subtitle');
+      if (subtitle) {
+        subtitle.innerText = "Cast your vote for each layout design sheet below. You must make a choice for all 5 structures before reviewing.";
+      }
+      
+      const form = document.getElementById('form_voting');
+      form.innerHTML = `
+        <!-- Design Row 1 -->
+        <fieldset id="design_block_1" class="design-row" aria-describedby="desc_1">
+          <legend id="desc_1">Design Choice 1: Structural Graphic T-Shirt Options</legend>
+          <div class="preview-frame">
+            <img src="/static/designs/1_front.jpg" alt="Design 1 Front View" tabindex="0">
+            <img src="/static/designs/1_back.jpg" alt="Design 1 Back View" tabindex="0">
+          </div>
+          <div class="radio-group">
+            <label for="d1_yes">
+              <input type="radio" id="d1_yes" name="design_1" value="yes" required onclick="onVoteSelectionChanged()"> YES, vote for Design 1
+            </label>
+            <label for="d1_no">
+              <input type="radio" id="d1_no" name="design_1" value="no" required onclick="onVoteSelectionChanged()"> NO, reject Design 1
+            </label>
+          </div>
+        </fieldset>
+
+        <!-- Design Row 2 -->
+        <fieldset id="design_block_2" class="design-row" aria-describedby="desc_2">
+          <legend id="desc_2">Design Choice 2: Elegant Canvas Hoodies</legend>
+          <div class="preview-frame">
+            <img src="/static/designs/2_front.jpg" alt="Design 2 Front View" tabindex="0">
+            <img src="/static/designs/2_back.jpg" alt="Design 2 Back View" tabindex="0">
+          </div>
+          <div class="radio-group">
+            <label for="d2_yes">
+              <input type="radio" id="d2_yes" name="design_2" value="yes" required onclick="onVoteSelectionChanged()"> YES, vote for Design 2
+            </label>
+            <label for="d2_no">
+              <input type="radio" id="d2_no" name="design_2" value="no" required onclick="onVoteSelectionChanged()"> NO, reject Design 2
+            </label>
+          </div>
+        </fieldset>
+
+        <!-- Design Row 3 -->
+        <fieldset id="design_block_3" class="design-row" aria-describedby="desc_3">
+          <legend id="desc_3">Design Choice 3: Vintage Athletic Sweatshirts</legend>
+          <div class="preview-frame">
+            <img src="/static/designs/3_front.jpg" alt="Design 3 Front View" tabindex="0">
+            <img src="/static/designs/3_back.jpg" alt="Design 3 Back View" tabindex="0">
+          </div>
+          <div class="radio-group">
+            <label for="d3_yes">
+              <input type="radio" id="d3_yes" name="design_3" value="yes" required onclick="onVoteSelectionChanged()"> YES, vote for Design 3
+            </label>
+            <label for="d3_no">
+              <input type="radio" id="d3_no" name="design_3" value="no" required onclick="onVoteSelectionChanged()"> NO, reject Design 3
+            </label>
+          </div>
+        </fieldset>
+
+        <!-- Design Row 4 -->
+        <fieldset id="design_block_4" class="design-row" aria-describedby="desc_4">
+          <legend id="desc_4">Design Choice 4: Minimalist Technical Outerwear</legend>
+          <div class="preview-frame">
+            <img src="/static/designs/4_front.jpg" alt="Design 4 Front View" tabindex="0">
+            <img src="/static/designs/4_back.jpg" alt="Design 4 Back View" tabindex="0">
+          </div>
+          <div class="radio-group">
+            <label for="d4_yes">
+              <input type="radio" id="d4_yes" name="design_4" value="yes" required onclick="onVoteSelectionChanged()"> YES, vote for Design 4
+            </label>
+            <label for="d4_no">
+              <input type="radio" id="d4_no" name="design_4" value="no" required onclick="onVoteSelectionChanged()"> NO, reject Design 4
+            </label>
+          </div>
+        </fieldset>
+
+        <!-- Design Row 5 -->
+        <fieldset id="design_block_5" class="design-row" aria-describedby="desc_5">
+          <legend id="desc_5">Design Choice 5: Cosmic Gradient Joggers</legend>
+          <div class="preview-frame">
+            <img src="/static/designs/5_front.jpg" alt="Design 5 Front View" tabindex="0">
+            <img src="/static/designs/5_back.jpg" alt="Design 5 Back View" tabindex="0">
+          </div>
+          <div class="radio-group">
+            <label for="d5_yes">
+              <input type="radio" id="d5_yes" name="design_5" value="yes" required onclick="onVoteSelectionChanged()"> YES, vote for Design 5
+            </label>
+            <label for="d5_no">
+              <input type="radio" id="d5_no" name="design_5" value="no" required onclick="onVoteSelectionChanged()"> NO, reject Design 5
+            </label>
+          </div>
+        </fieldset>
+
+        <button type="submit" id="btn_review_choices" class="btn btn-primary" disabled style="margin-top: 1.5rem;">
+          Review choices
+        </button>
+      `;
+    }
+
+    function renderCustomOptions(options) {
+      const subtitle = document.getElementById('voting_subtitle');
+      if (subtitle) {
+        subtitle.innerText = "Cast your votes for each Question/Description below and click review.";
+      }
+      
+      const form = document.getElementById('form_voting');
+      form.innerHTML = '';
+      
+      const container = document.createElement('div');
+      container.style.display = 'flex';
+      container.style.flexDirection = 'column';
+      container.style.gap = '1.5rem';
+      container.style.marginBottom = '2rem';
+      
+      options.forEach((opt, idx) => {
+        const optionId = idx + 1;
+        const card = document.createElement('div');
+        card.className = 'design-row';
+        card.style.display = 'flex';
+        card.style.flexDirection = 'column';
+        card.style.gap = '1.25rem';
+        card.style.padding = '1.5rem';
+        card.style.margin = '0';
+        card.style.border = '1px solid var(--surface-border)';
+        card.style.borderRadius = '12px';
+        card.style.backgroundColor = 'rgba(255,255,255,0.02)';
+        
+        let parsed;
+        try {
+          parsed = JSON.parse(opt.option_text);
+        } catch (e) {
+          parsed = {
+            question: opt.option_text,
+            choices: ["YES", "NO"]
+          };
         }
-      })
-      .catch(err => {
-        spinner.style.display = 'none';
-        alertDiv.innerText = "Processing fault. Connection error.";
-        alertDiv.style.display = 'block';
+
+        // Title Header
+        const headerDiv = document.createElement('div');
+        headerDiv.style.display = 'flex';
+        headerDiv.style.flexDirection = 'column';
+        headerDiv.style.gap = '0.25rem';
+
+        const qTitle = document.createElement('h3');
+        qTitle.style.fontSize = '1.15rem';
+        qTitle.style.fontWeight = '700';
+        qTitle.style.color = 'var(--primary-color)';
+        qTitle.style.margin = '0';
+        qTitle.innerText = parsed.question;
+        headerDiv.appendChild(qTitle);
+        card.appendChild(headerDiv);
+
+        // Optional Image Preview Block (attached to question)
+        if (opt.image_data && opt.image_data.trim() !== '') {
+          const previewFrame = document.createElement('div');
+          previewFrame.className = 'preview-frame';
+          previewFrame.style.maxHeight = '280px';
+          previewFrame.style.overflow = 'hidden';
+          previewFrame.style.borderRadius = '8px';
+          previewFrame.style.border = '1px solid rgba(255,255,255,0.05)';
+          previewFrame.style.display = 'flex';
+          previewFrame.style.justifyContent = 'center';
+          previewFrame.style.alignItems = 'center';
+          previewFrame.style.backgroundColor = '#000';
+
+          const img = document.createElement('img');
+          img.src = opt.image_data;
+          img.alt = parsed.question;
+          img.style.maxHeight = '280px';
+          img.style.width = 'auto';
+          img.style.objectFit = 'contain';
+          previewFrame.appendChild(img);
+          card.appendChild(previewFrame);
+        }
+
+        // Render nested choice options radio list
+        const choicesListDiv = document.createElement('div');
+        choicesListDiv.style.display = 'flex';
+        choicesListDiv.style.flexDirection = 'column';
+        choicesListDiv.style.gap = '0.75rem';
+        choicesListDiv.style.marginTop = '0.5rem';
+
+        parsed.choices.forEach((choiceText, choiceIdx) => {
+          const choiceIdLabel = `opt_${optionId}_choice_${choiceIdx}`;
+          
+          const radioLabel = document.createElement('label');
+          radioLabel.htmlFor = choiceIdLabel;
+          radioLabel.style.display = 'flex';
+          radioLabel.style.alignItems = 'center';
+          radioLabel.style.gap = '0.75rem';
+          radioLabel.style.fontSize = '1.1rem';
+          radioLabel.style.fontWeight = '600';
+          radioLabel.style.cursor = 'pointer';
+          radioLabel.style.color = 'var(--text-primary)';
+          radioLabel.style.padding = '0.75rem 1rem';
+          radioLabel.style.backgroundColor = 'rgba(255,255,255,0.015)';
+          radioLabel.style.border = '1px solid rgba(255,255,255,0.03)';
+          radioLabel.style.borderRadius = '8px';
+          radioLabel.style.width = '100%';
+          radioLabel.style.margin = '0';
+
+          const radio = document.createElement('input');
+          radio.type = 'radio';
+          radio.name = 'design_' + optionId;
+          radio.id = choiceIdLabel;
+          radio.value = choiceText;
+          radio.required = true;
+          radio.style.width = '20px';
+          radio.style.height = '20px';
+          radio.style.margin = '0';
+          radio.onclick = (e) => {
+            e.stopPropagation();
+            onVoteSelectionChanged();
+          };
+
+          const textSpan = document.createElement('span');
+          textSpan.innerText = choiceText;
+
+          radioLabel.appendChild(radio);
+          radioLabel.appendChild(textSpan);
+          choicesListDiv.appendChild(radioLabel);
+        });
+
+        card.appendChild(choicesListDiv);
+        container.appendChild(card);
       });
+      
+      form.appendChild(container);
+
+      const reviewBtn = document.createElement('button');
+      reviewBtn.type = 'submit';
+      reviewBtn.id = 'btn_review_choices';
+      reviewBtn.className = 'btn btn-primary';
+      reviewBtn.innerText = 'Review choice';
+      reviewBtn.disabled = true;
+      reviewBtn.style.marginTop = '1rem';
+      
+      form.appendChild(reviewBtn);
     }
 
     // Screen 3 Action -> Live Radio monitor limit checking
     function onVoteSelectionChanged() {
       const radioChecked = document.querySelectorAll('#form_voting input[type="radio"]:checked');
       const submitBtn = document.getElementById('btn_review_choices');
-      submitBtn.disabled = (radioChecked.length !== 5);
+      
+      const customOptionsCount = window.activeCustomOptions ? window.activeCustomOptions.length : 0;
+      if (customOptionsCount > 0) {
+        submitBtn.disabled = (radioChecked.length !== customOptionsCount);
+      } else {
+        submitBtn.disabled = (radioChecked.length !== 5);
+      }
     }
 
     // Screen 3 Form Submit -> Display selections
@@ -503,9 +849,19 @@
       e.preventDefault();
       
       const selections = [];
-      for (let i = 1; i <= 5; i++) {
-        const choice = document.querySelector(`input[name="design_${i}"]:checked`).value;
-        selections.push({ design_id: i, choice: choice });
+      const customOptionsCount = window.activeCustomOptions ? window.activeCustomOptions.length : 0;
+
+      if (customOptionsCount > 0) {
+         for (let i = 1; i <= customOptionsCount; i++) {
+           const selectedRadio = document.querySelector(`input[name="design_${i}"]:checked`);
+           const choice = selectedRadio ? selectedRadio.value : "";
+           selections.push({ design_id: i, choice: choice });
+         }
+      } else {
+        for (let i = 1; i <= 5; i++) {
+          const choice = document.querySelector(`input[name="design_${i}"]:checked`).value;
+          selections.push({ design_id: i, choice: choice });
+        }
       }
 
       // Cache parameters safely
@@ -518,22 +874,50 @@
       const listContainer = document.getElementById('list_verification');
       listContainer.innerHTML = '';
 
-      selections.forEach(item => {
-        const row = document.createElement('div');
-        row.className = 'verification-item';
-        
-        const label = document.createElement('span');
-        label.className = 'design-title';
-        label.innerText = 'Design Theme #' + item.design_id + ' Alignment:';
-        
-        const badge = document.createElement('span');
-        badge.className = 'vote-badge ' + item.choice;
-        badge.innerText = item.choice.toUpperCase();
+      if (customOptionsCount > 0) {
+        selections.forEach((item, idx) => {
+          const opt = window.activeCustomOptions[idx];
+          let parsed;
+          try {
+            parsed = JSON.parse(opt.option_text);
+          } catch {
+            parsed = { question: opt.option_text };
+          }
 
-        row.appendChild(label);
-        row.appendChild(badge);
-        listContainer.appendChild(row);
-      });
+          const row = document.createElement('div');
+          row.className = 'verification-item';
+          
+          const label = document.createElement('span');
+          label.className = 'design-title';
+          label.innerText = parsed.question + ':';
+          
+          const badge = document.createElement('span');
+          const isYesStyle = (item.choice.toLowerCase() === 'yes' || item.choice.toLowerCase().startsWith('yes') || item.choice.toLowerCase() === 'agree');
+          badge.className = 'vote-badge ' + (isYesStyle ? 'yes' : 'no');
+          badge.innerText = item.choice.toUpperCase();
+
+          row.appendChild(label);
+          row.appendChild(badge);
+          listContainer.appendChild(row);
+        });
+      } else {
+        selections.forEach(item => {
+          const row = document.createElement('div');
+          row.className = 'verification-item';
+          
+          const label = document.createElement('span');
+          label.className = 'design-title';
+          label.innerText = 'Design Theme #' + item.design_id + ' Alignment:';
+          
+          const badge = document.createElement('span');
+          badge.className = 'vote-badge ' + item.choice;
+          badge.innerText = item.choice.toUpperCase();
+
+          row.appendChild(label);
+          row.appendChild(badge);
+          listContainer.appendChild(row);
+        });
+      }
 
       navigateToScreen(4);
     }
@@ -555,9 +939,14 @@
       const controller = new AbortController();
       const signalId = setTimeout(() => controller.abort(), 5000);
 
+      const headers = { 'Content-Type': 'application/json' };
+      if (window.sessionToken) {
+        headers['Authorization'] = 'Bearer ' + window.sessionToken;
+      }
+
       fetch('/votes/submit', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: headers,
         body: JSON.stringify({ votes: window.userSelectionCache }),
         signal: controller.signal
       })

@@ -8,8 +8,9 @@
   <style>
     /* Admin specific visual alignments */
     body {
-      align-items: flex-start;
-      padding: 3rem 1.5rem;
+      padding: 1rem;
+      margin: 0;
+      overflow-x: hidden;
     }
     .admin-card {
       background-color: var(--surface-color);
@@ -18,7 +19,7 @@
       padding: 2.5rem;
       width: 100%;
       max-width: 900px;
-      margin: auto;
+      margin: 1.5rem auto;
     }
     .panel-section {
       border-top: 1px solid var(--surface-border);
@@ -48,6 +49,7 @@
       .admin-card {
         padding: 1.25rem 1rem;
         border-radius: 8px;
+        margin: 0.5rem auto;
       }
       .admin-header {
         flex-direction: column;
@@ -358,7 +360,7 @@
 
     <!-- SUB-PANEL C: CUSTOMIZE VOTING OPTIONS (AFTER CREATION) -->
     <div id="panel_customize_options" style="display: none; margin-top: 1rem;">
-      <div style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center;">
+      <div style="margin-bottom: 1.5rem; display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 1rem;">
         <button class="btn btn-secondary" onclick="finishAndLaunchElection()" style="width: auto; margin-top: 0; padding: 0.5rem 1.25rem; font-size: 0.95rem;">
           &larr; Done, Return to Index
         </button>
@@ -370,39 +372,47 @@
         <span style="color: var(--text-secondary); font-size: 0.9rem;">Adding dynamic options for Election ID: <code id="options_election_id">#</code></span>
       </div>
       
-      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 2rem; margin-bottom: 2rem;">
-        <!-- Left Column: New Option Input -->
-        <div style="background-color: rgba(255,255,255,0.02); border: 1px solid var(--surface-border); padding: 1.5rem; border-radius: 8px;">
-          <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 1.25rem; color: var(--primary-color);">Add New Voting Option</h3>
-          <form onsubmit="handleAddDynamicOption(event)">
-            <label for="new_option_text" style="font-size: 0.9rem; display: block; margin-bottom: 0.5rem;">Option Label / Text Description</label>
-            <input type="text" id="new_option_text" placeholder="e.g. Design 1: Retro Organic Cotton Hoodie" required autocomplete="off" style="width: 100%; margin-bottom: 1rem; padding: 0.6rem 0.8rem; font-size: 0.95rem; background-color: var(--bg-color); border: 1px solid var(--surface-border); border-radius: 8px; color: var(--text-primary);">
-
-            <label for="new_option_image" style="font-size: 0.9rem; display: block; margin-bottom: 0.5rem;">Option Image</label>
-            <input type="file" id="new_option_image" accept="image/*" required onchange="previewSelectedImage(event)" style="width: 100%; margin-bottom: 1.5rem; color: var(--text-secondary); font-size: 0.9rem; padding: 0.25rem 0;">
-
-            <div id="image_preview_container" style="display: none; margin-bottom: 1.5rem; text-align: center; border: 1px dashed var(--surface-border); padding: 1rem; border-radius: 8px; background-color: rgba(0,0,0,0.2);">
-              <p style="font-size: 0.8rem; color: var(--text-secondary); margin-bottom: 0.5rem;">Selected Image Preview</p>
-              <img id="image_preview" src="" style="max-height: 180px; border-radius: 6px; max-width: 100%; object-fit: contain;">
-            </div>
-
-            <button type="submit" class="btn btn-primary" id="btn_add_option" style="width: 100%;">
-              Post Option <div id="spinner_add_option" class="spinner"></div>
-            </button>
-            <div id="options_alert_error" style="display: none; color: var(--text-error); font-size: 0.85rem; margin-top: 1rem; text-align: center;"></div>
-          </form>
-        </div>
-
-        <!-- Right Column: Loaded Options list -->
-        <div style="background-color: rgba(255,255,255,0.01); border: 1px solid var(--surface-border); padding: 1.5rem; border-radius: 8px; max-height: 600px; overflow-y: auto;">
-          <h3 style="font-size: 1.15rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--primary-color);">Current Option Cards</h3>
-          <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.25rem;">These choices are live. Voters will vote YES or NO for each.</p>
+      <div style="display: flex; flex-direction: column; gap: 2rem; margin-bottom: 2rem;">
+        <!-- Upper Section: Loaded Options list (Coherent Overview of Live Ballots) -->
+        <div style="background-color: rgba(255,255,255,0.01); border: 1px solid var(--surface-border); padding: 1.5rem; border-radius: 8px;">
+          <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--primary-color);">Active Ballot Options Overview</h3>
+          <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.25rem; line-height: 1.4;">
+            These are the official options that will be displayed on the voter's ballot. <strong>Voters will select exactly one choice from this pool.</strong> If you do not configure any custom options, the system automatically runs the poll using the default template of 5 standard design sheets.
+          </p>
           
           <div id="added_options_list" style="display: flex; flex-direction: column; gap: 1rem;">
             <p style="text-align: center; color: var(--text-secondary); font-size: 0.9rem; padding: 2rem;">No custom options added yet. (Will fall back to default template of 5 standard design sheets if left empty.)</p>
           </div>
         </div>
+
+        <!-- Lower Section: New Option Builder Input (Dynamic Flow) -->
+        <div style="background-color: rgba(255,255,255,0.02); border: 1px solid var(--surface-border); padding: 1.5rem; border-radius: 8px;">
+          <h3 style="font-size: 1.25rem; font-weight: 700; margin-bottom: 0.5rem; color: var(--primary-color);">Dynamic Choice Creator</h3>
+          <p style="color: var(--text-secondary); font-size: 0.85rem; margin-bottom: 1.5rem; line-height: 1.4;">
+            Draft choices below. Images are optional: click the picture icon inside the right edge of any text field to optionally upload an image for that option.
+          </p>
+
+          <form onsubmit="handleSaveAllDynamicOptions(event)">
+            <div id="dynamic_options_container">
+              <!-- Dynamic option rows will be dynamically appended here -->
+            </div>
+
+            <button type="submit" class="btn btn-primary" id="btn_save_all_options" style="width: 100%; max-width: 300px; display: block; margin: 1.5rem auto 0 auto;">
+              Save & Add These Options <div id="spinner_save_options" class="spinner"></div>
+            </button>
+            <div id="options_alert_error" style="display: none; color: var(--text-error); font-size: 0.85rem; margin-top: 1rem; text-align: center;"></div>
+          </form>
+        </div>
       </div>
+
+      <!-- Bottom Done Flow -->
+      <div style="margin-top: 2rem; padding: 1.5rem; background-color: rgba(255, 255, 255, 0.01); border: 1px solid var(--surface-border); border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.75rem; clear: both;">
+        <p style="color: var(--text-secondary); font-size: 0.9rem; margin: 0; text-align: center;">Finished customizing options? Head back to the control panel index.</p>
+        <button class="btn btn-secondary" onclick="finishAndLaunchElection()" style="width: auto; min-width: 250px; margin: 0; padding: 0.6rem 1.75rem; font-size: 1rem; border: 1px solid var(--primary-color); color: var(--primary-color);">
+          &larr; Done, Return to Index
+        </button>
+      </div>
+
     </div>
 
   </div>
@@ -820,10 +830,10 @@
       document.getElementById('options_election_title').innerText = "Customize Voting Options: " + title;
       document.getElementById('options_election_id').innerText = '#' + id;
       
-      document.getElementById('new_option_text').value = '';
-      document.getElementById('new_option_image').value = '';
-      document.getElementById('image_preview_container').style.display = 'none';
-      document.getElementById('image_preview').src = '';
+      // Clear dynamic options builder
+      document.getElementById('dynamic_options_container').innerHTML = '';
+      addDynamicOptionRow();
+      addDynamicOptionRow();
       
       document.getElementById('panel_elections_index').style.display = 'none';
       document.getElementById('panel_customize_options').style.display = 'block';
@@ -837,22 +847,170 @@
       fetchAndRenderElections();
     }
 
-    function previewSelectedImage(e) {
-      const file = e.target.files[0];
-      const previewContainer = document.getElementById('image_preview_container');
-      const previewImg = document.getElementById('image_preview');
+    let dynamicOptionRowCounter = 0;
+
+    function addDynamicOptionRow() {
+      const container = document.getElementById('dynamic_options_container');
+      dynamicOptionRowCounter++;
+      const rowId = `dynamic_row_${dynamicOptionRowCounter}`;
+      
+      const rowDiv = document.createElement('div');
+      rowDiv.id = rowId;
+      rowDiv.className = 'dynamic-opt-row';
+      rowDiv.style = "border: 1px solid var(--surface-border); border-radius: 12px; padding: 1.5rem; background-color: rgba(255,255,255,0.012); margin-bottom: 1.5rem; position: relative; display: flex; flex-direction: column; gap: 1rem;";
+      
+      rowDiv.innerHTML = `
+        <!-- Question Header -->
+        <div style="display: flex; justify-content: space-between; align-items: center;">
+          <strong style="color: var(--primary-color); font-size: 1rem; font-weight: 700;">Question / Description Entry #${container.querySelectorAll('.dynamic-opt-row').length + 1}</strong>
+          <button type="button" class="btn" style="width: auto; margin: 0; padding: 0.25rem 0.6rem; font-size: 0.8rem; background-color: rgba(239, 68, 68, 0.1); color: var(--text-error); border: 1px solid var(--text-error); cursor: pointer;" onclick="removeDynamicRow('${rowId}')">Remove Entry</button>
+        </div>
+        
+        <!-- Question Input & Optional Image Picker -->
+        <div style="display: flex; gap: 0.75rem; align-items: center; width: 100%;">
+          <input type="text" class="row-opt-text" placeholder="Question / Description Name (e.g. Design Choice 1 options)..." required autocomplete="off" style="flex: 1; padding: 0.7rem 0.8rem; font-size: 0.95rem; background-color: var(--bg-color); border: 1px solid var(--surface-border); border-radius: 8px; color: var(--text-primary); margin: 0;">
+          
+          <label style="display: flex; align-items: center; justify-content: center; cursor: pointer; width: 44px; height: 44px; border-radius: 8px; background-color: rgba(255,255,255,0.05); border: 1px solid var(--surface-border); flex-shrink: 0;" title="Upload image for this Question/Description">
+            <svg width="20" height="20" style="color: var(--primary-color);" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <rect x="3" y="3" width="18" height="18" rx="2" ry="2"></rect>
+              <circle cx="8.5" cy="8.5" r="1.5"></circle>
+              <polyline points="21 15 16 10 5 21"></polyline>
+            </svg>
+            <input type="file" accept="image/*" class="row-opt-file" style="display: none;" onchange="previewRowImage(this, '${rowId}')">
+          </label>
+        </div>
+        
+        <!-- Image Preview Frame -->
+        <div class="row-image-preview-container" style="display: none; gap: 0.75rem; align-items: center; background: rgba(0,0,0,0.2); padding: 0.5rem; border-radius: 6px; border: 1px solid var(--surface-border);">
+          <img class="row-image-preview" src="" style="max-height: 60px; max-width: 80px; object-fit: contain; border-radius: 4px; border: 1px solid var(--surface-border); background: #000;">
+          <div style="flex: 1; min-width: 0;">
+            <p class="row-image-name" style="font-size: 0.8rem; color: var(--text-secondary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin: 0;"></p>
+          </div>
+          <button type="button" class="btn" style="width: auto; margin: 0; padding: 0.25rem 0.5rem; font-size: 0.75rem; background: rgba(239, 68, 68, 0.15); color: var(--text-error); border: 1px solid var(--text-error); cursor: pointer;" onclick="clearRowImage('${rowId}')">Clear Image</button>
+        </div>
+
+        <!-- Nested Choice Options Area -->
+        <div style="padding-left: 1rem; border-left: 3px solid rgba(208, 188, 255, 0.25); display: flex; flex-direction: column; gap: 0.75rem; margin-top: 0.5rem;">
+          <div style="display: flex; justify-content: space-between; align-items: center;">
+            <span style="font-size: 0.85rem; font-weight: bold; color: var(--text-secondary);">Option Choices for this Entry:</span>
+            <button type="button" class="btn btn-secondary" style="width: auto; margin: 0; padding: 0.22rem 0.6rem; font-size: 0.75rem; border-color: var(--primary-color); color: var(--primary-color); cursor: pointer;" onclick="addNestedChoiceToRow('${rowId}')">➕ Add Choice</button>
+          </div>
+          <div class="nested-choices-list" style="display: flex; flex-direction: column; gap: 0.5rem;">
+            <!-- nested choice rows added dynamically -->
+          </div>
+        </div>
+      `;
+      
+      container.appendChild(rowDiv);
+      
+      // Pre-populate with YES and NO nested choices
+      addNestedChoiceToRow(rowId, "YES");
+      addNestedChoiceToRow(rowId, "NO");
+      
+      updateDynamicPrompt();
+    }
+
+    function addNestedChoiceToRow(rowId, defaultValue = "") {
+      const card = document.getElementById(rowId);
+      if (!card) return;
+      const listContainer = card.querySelector('.nested-choices-list');
+      
+      const choiceId = 'nested_choice_' + Math.floor(Math.random() * 10000000);
+      const row = document.createElement('div');
+      row.id = choiceId;
+      row.style.display = 'flex';
+      row.style.alignItems = 'center';
+      row.style.gap = '0.5rem';
+      
+      row.innerHTML = `
+        <span style="color: var(--text-secondary); font-size: 0.85rem; width: 12px; text-align: right;">&bull;</span>
+        <input type="text" class="nested-choice-input" placeholder="Choice text (e.g. YES, Reject, Option A...)" value="${defaultValue}" required autocomplete="off" style="flex: 1; padding: 0.4rem 0.6rem; font-size: 0.85rem; background-color: var(--bg-color); border: 1px solid var(--surface-border); border-radius: 6px; color: var(--text-primary); margin: 0;">
+        <button type="button" class="btn" style="width: auto; margin: 0; padding: 0.2rem 0.4rem; font-size: 0.75rem; background-color: rgba(239, 68, 68, 0.1); color: var(--text-error); border: 1px solid var(--text-error); cursor: pointer;" onclick="document.getElementById('${choiceId}').remove()">Remove</button>
+      `;
+      listContainer.appendChild(row);
+    }
+
+    function removeDynamicRow(rowId) {
+      const row = document.getElementById(rowId);
+      if (row) {
+        row.remove();
+      }
+      recalculateRowLabels();
+      updateDynamicPrompt();
+    }
+
+    function recalculateRowLabels() {
+      const container = document.getElementById('dynamic_options_container');
+      const rows = container.querySelectorAll('.dynamic-opt-row');
+      rows.forEach((row, idx) => {
+        const strong = row.querySelector('strong');
+        if (strong) {
+          strong.innerText = `Question / Description Entry #${idx + 1}`;
+        }
+      });
+    }
+
+    function updateDynamicPrompt() {
+      // Remove any previously appended link/prompt button to prevent stacking
+      const existingPrompt = document.getElementById('dynamic_prompt_block');
+      if (existingPrompt) {
+        existingPrompt.remove();
+      }
+      
+      const container = document.getElementById('dynamic_options_container');
+      
+      // We always show a dynamic prompt block just bottom of the last option row
+      const promptDiv = document.createElement('div');
+      promptDiv.id = 'dynamic_prompt_block';
+      promptDiv.style = "text-align: center; margin: 1rem 0; padding: 1.25rem; border: 2px dashed rgba(208, 188, 255, 0.25); border-radius: 8px; background-color: rgba(208, 188, 255, 0.02); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.5rem;";
+      
+      promptDiv.innerHTML = `
+        <span style="color: var(--text-secondary); font-size: 0.9rem;">Entry added successfully! Need to add another Question/Description?</span>
+        <button type="button" class="btn btn-secondary" onclick="addDynamicOptionRow()" style="width: auto; margin-top: 0; padding: 0.4rem 1.25rem; font-size: 0.85rem; border-color: var(--primary-color); color: var(--primary-color); display: inline-flex; align-items: center; gap: 0.4rem; cursor: pointer;">
+          <span>➕</span> Add Another Question / Description
+        </button>
+      `;
+      
+      container.appendChild(promptDiv);
+    }
+
+    function previewRowImage(input, rowId) {
+      const container = document.getElementById(rowId);
+      if (!container) return;
+      
+      const file = input.files[0];
+      const previewContainer = container.querySelector('.row-image-preview-container');
+      const previewImg = container.querySelector('.row-image-preview');
+      const filenameText = container.querySelector('.row-image-name');
       
       if (file) {
         const reader = new FileReader();
-        reader.onload = function(evt) {
-          previewImg.src = evt.target.result;
-          previewContainer.style.display = 'block';
-        };
+        reader.onload = function(e) {
+          previewImg.src = e.target.result;
+          filenameText.innerText = file.name;
+          previewContainer.style.setProperty('display', 'flex', 'important');
+        }
         reader.readAsDataURL(file);
       } else {
-        previewContainer.style.display = 'none';
         previewImg.src = '';
+        filenameText.innerText = '';
+        previewContainer.style.setProperty('display', 'none', 'important');
       }
+    }
+
+    function clearRowImage(rowId) {
+      const container = document.getElementById(rowId);
+      if (!container) return;
+      
+      const fileInput = container.querySelector('.row-opt-file');
+      const previewContainer = container.querySelector('.row-image-preview-container');
+      const previewImg = container.querySelector('.row-image-preview');
+      const filenameText = container.querySelector('.row-image-name');
+      
+      fileInput.value = '';
+      previewImg.src = '';
+      filenameText.innerText = '';
+      previewContainer.style.setProperty('display', 'none', 'important');
     }
 
     function fetchAndRenderCurrentCustomOptions() {
@@ -864,33 +1022,62 @@
       fetch(`/api/elections/options?election_id=${customizeElectionId}`)
         .then(res => res.json())
         .then(options => {
-          badge.innerText = options.length;
+          if (badge) {
+            badge.innerText = options.length;
+          }
           listContainer.innerHTML = '';
           
           if (options.length === 0) {
-            listContainer.innerHTML = '<p style="text-align: center; color: var(--text-secondary); font-size: 0.9rem; padding: 2rem;">No custom options added yet. (Will fall back to default template of 5 standard design sheets if left empty.)</p>';
+            listContainer.innerHTML = '<p style="text-align: center; color: var(--text-secondary); font-size: 0.95rem; padding: 2rem; border: 1px dashed rgba(255,255,255,0.05); border-radius: 8px;">No custom options added yet. (Will fall back to default template of 5 standard design sheets if left empty.)</p>';
             return;
           }
           
           options.forEach((opt, idx) => {
             const row = document.createElement('div');
-            row.style = "display: flex; gap: 1rem; align-items: center; border: 1px solid var(--surface-border); border-radius: 8px; padding: 0.75rem; background-color: rgba(255,255,255,0.015);";
+            row.style = "display: flex; gap: 1rem; align-items: center; border: 1px solid var(--surface-border); border-radius: 8px; padding: 0.75rem; background-color: rgba(255,255,255,0.015); justify-content: space-between;";
             
+            const leftRow = document.createElement('div');
+            leftRow.style = "display: flex; gap: 1rem; align-items: center; flex: 1; min-width: 0;";
+
             const numSpan = document.createElement('span');
-            numSpan.style = "font-weight: bold; color: var(--primary-color); font-size: 1.1rem; width: 30px;";
+            numSpan.style = "font-weight: bold; color: var(--primary-color); font-size: 1rem; width: 30px;";
             numSpan.innerText = `#${idx + 1}`;
             
-            const img = document.createElement('img');
-            img.src = opt.image_data;
-            img.style = "max-width: 80px; height: 80px; object-fit: contain; border-radius: 4px; border: 1px solid var(--surface-border); background: #000;";
+            leftRow.appendChild(numSpan);
+
+            if (opt.image_data && opt.image_data.trim() !== '') {
+              const img = document.createElement('img');
+              img.src = opt.image_data;
+              img.style = "max-width: 80px; height: 80px; object-fit: contain; border-radius: 4px; border: 1px solid var(--surface-border); background: #000;";
+              leftRow.appendChild(img);
+            }
             
             const textContent = document.createElement('div');
             textContent.style = "flex: 1; min-width: 0;";
-            textContent.innerHTML = `<p style="font-size: 0.95rem; font-weight: 500; margin-bottom: 0.25rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: var(--text-primary);">${opt.option_text}</p>`;
+            
+            let questionName = opt.option_text;
+            let choicesHtml = "";
+            try {
+              const parsed = JSON.parse(opt.option_text);
+              questionName = parsed.question;
+              if (parsed.choices && parsed.choices.length > 0) {
+                choicesHtml = `
+                  <div style="margin-top: 0.35rem; display: flex; flex-wrap: wrap; gap: 0.4rem;">
+                    ${parsed.choices.map(c => `<span style="font-size: 0.75rem; padding: 0.15rem 0.5rem; background-color: rgba(208, 188, 255, 0.1); color: var(--primary-color); border: 1px solid rgba(208, 188, 255, 0.2); border-radius: 4px;">${c}</span>`).join('')}
+                  </div>
+                `;
+              }
+            } catch (e) {}
+
+            textContent.innerHTML = `
+              <p style="font-size: 0.95rem; font-weight: 600; margin: 0; color: var(--text-primary); white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">${questionName}</p>
+              ${choicesHtml}
+            `;
+            leftRow.appendChild(textContent);
             
             const delBtn = document.createElement('button');
             delBtn.className = "btn";
-            delBtn.style = "width: auto; margin-top: 0; padding: 0.35rem 0.75rem; font-size: 0.8rem; background-color: rgba(239, 68, 68, 0.1); color: var(--text-error); border: 1px solid var(--text-error);";
+            delBtn.style = "width: auto; margin-top: 0; padding: 0.35rem 0.75rem; font-size: 0.8rem; background-color: rgba(239, 68, 68, 0.1); color: var(--text-error); border: 1px solid var(--text-error); cursor: pointer;";
             delBtn.innerText = "Remove";
             delBtn.onclick = () => {
               delBtn.disabled = true;
@@ -904,9 +1091,7 @@
               .catch(err => console.error(err));
             };
             
-            row.appendChild(numSpan);
-            row.appendChild(img);
-            row.appendChild(textContent);
+            row.appendChild(leftRow);
             row.appendChild(delBtn);
             listContainer.appendChild(row);
           });
@@ -917,70 +1102,119 @@
         });
     }
 
-    function handleAddDynamicOption(e) {
-      e.preventDefault();
+    function handleSaveAllDynamicOptions(e) {
+      if (e) e.preventDefault();
       
-      const textInput = document.getElementById('new_option_text');
-      const fileInput = document.getElementById('new_option_image');
       const errorDiv = document.getElementById('options_alert_error');
-      
       errorDiv.style.display = 'none';
       
-      const text = textInput.value.trim();
-      const file = fileInput.files[0];
+      const container = document.getElementById('dynamic_options_container');
+      const rows = container.querySelectorAll('.dynamic-opt-row');
       
-      if (!text || !file) return;
+      if (rows.length === 0) {
+        errorDiv.innerText = "Please add at least one option row.";
+        errorDiv.style.display = 'block';
+        return;
+      }
       
-      const spinner = document.getElementById('spinner_add_option');
-      const submitBtn = document.getElementById('btn_add_option');
+      const spinner = document.getElementById('spinner_save_options');
+      const submitBtn = document.getElementById('btn_save_all_options');
       
       spinner.style.display = 'inline-block';
       submitBtn.disabled = true;
       
-      const reader = new FileReader();
-      reader.onerror = function() {
-        spinner.style.display = 'none';
-        submitBtn.disabled = false;
-        errorDiv.innerText = "Failed to load image file from disk.";
-        errorDiv.style.display = 'block';
-      };
+      const promises = Array.from(rows).map((row, idx) => {
+        return new Promise((resolve, reject) => {
+          const textInput = row.querySelector('.row-opt-text');
+          const fileInput = row.querySelector('.row-opt-file');
+          const previewImg = row.querySelector('.row-image-preview');
+          const nestedInputs = row.querySelectorAll('.nested-choice-input');
+          
+          const text = textInput.value.trim();
+          if (!text) {
+            reject(new Error(`Row #${idx + 1} Question/Description text cannot be empty.`));
+            return;
+          }
+
+          const choices = [];
+          nestedInputs.forEach(inp => {
+            const val = inp.value.trim();
+            if (val) {
+              choices.push(val);
+            }
+          });
+
+          if (choices.length === 0) {
+            reject(new Error(`Row #${idx + 1} must possess at least one option choice.`));
+            return;
+          }
+
+          // Structured text payload
+          const structuredText = JSON.stringify({
+            question: text,
+            choices: choices
+          });
+          
+          if (previewImg && previewImg.src && previewImg.src.startsWith('data:image')) {
+            resolve({ text: structuredText, base64: previewImg.src });
+          } else if (fileInput && fileInput.files && fileInput.files[0]) {
+            const reader = new FileReader();
+            reader.onload = function(evt) {
+              resolve({ text: structuredText, base64: evt.target.result });
+            };
+            reader.onerror = function() {
+              reject(new Error(`Row #${idx + 1} failed to load image.`));
+            };
+            reader.readAsDataURL(fileInput.files[0]);
+          } else {
+            resolve({ text: structuredText, base64: "" });
+          }
+        });
+      });
       
-      reader.onload = function(evt) {
-        const base64Data = evt.target.result;
-        
-        fetch('/admin/elections/options', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            election_id: customizeElectionId,
-            option_text: text,
-            image_data: base64Data
-          })
+      Promise.all(promises)
+        .then(parsedOptions => {
+          let chain = Promise.resolve();
+          
+          parsedOptions.forEach(opt => {
+            chain = chain.then(() => {
+              return fetch('/admin/elections/options', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                  election_id: customizeElectionId,
+                  option_text: opt.text,
+                  image_data: opt.base64
+                })
+              }).then(res => {
+                if (res.status !== 200) {
+                  return res.json().then(err => {
+                    throw new Error(err.error || "Failed to post option.");
+                  });
+                }
+              });
+            });
+          });
+          
+          return chain;
         })
-        .then(async res => {
+        .then(() => {
           spinner.style.display = 'none';
           submitBtn.disabled = false;
           
-          if (res.status === 200) {
-            textInput.value = '';
-            fileInput.value = '';
-            document.getElementById('image_preview_container').style.display = 'none';
-            document.getElementById('image_preview').src = '';
-            fetchAndRenderCurrentCustomOptions();
-          } else {
-            const err = await res.json();
-            errorDiv.innerText = err.error || "Execution fault.";
-            errorDiv.style.display = 'block';
-          }
+          // Reset custom fields to empty rows
+          container.innerHTML = '';
+          addDynamicOptionRow();
+          addDynamicOptionRow();
+          
+          fetchAndRenderCurrentCustomOptions();
         })
         .catch(err => {
           spinner.style.display = 'none';
           submitBtn.disabled = false;
-          errorDiv.innerText = "Network request failed.";
+          errorDiv.innerText = err.message || "An error occurred while saving.";
           errorDiv.style.display = 'block';
         });
-      };
-      reader.readAsDataURL(file);
     }
 
     // -- Deletion Confirmation Actions --
@@ -1257,7 +1491,12 @@
           const sheetNames = {};
           if (currentElectionOptions && currentElectionOptions.length > 0) {
             currentElectionOptions.forEach((opt, index) => {
-              sheetNames[index + 1] = opt.option_text;
+              let name = opt.option_text;
+              try {
+                const parsed = JSON.parse(opt.option_text);
+                name = parsed.question;
+              } catch (e) {}
+              sheetNames[index + 1] = name;
             });
           } else {
             sheetNames[1] = "Design 1: T-Shirt Options";
@@ -1277,7 +1516,17 @@
             
             const tdId = document.createElement('td');
             const name = sheetNames[s.design_id] || `Design Sheet #${s.design_id}`;
-            tdId.innerHTML = `<strong>${name}</strong>`;
+            
+            let breakdownHtml = "";
+            if (s.choices_breakdown) {
+              const entries = Object.entries(s.choices_breakdown);
+              if (entries.length > 0) {
+                breakdownHtml = `<div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">Detailed breakdown: ` + 
+                  entries.map(([k, v]) => `<strong>${k}</strong>: ${v}`).join(', ') + 
+                  `</div>`;
+              }
+            }
+            tdId.innerHTML = `<strong>${name}</strong>${breakdownHtml}`;
 
             const tdYes = document.createElement('td');
             tdYes.className = 'text-center';
@@ -1325,7 +1574,12 @@
           const sheetNamesShort = {};
           if (currentElectionOptions && currentElectionOptions.length > 0) {
             currentElectionOptions.forEach((opt, index) => {
-              sheetNamesShort[index + 1] = opt.option_text;
+              let name = opt.option_text;
+              try {
+                const parsed = JSON.parse(opt.option_text);
+                name = parsed.question;
+              } catch (e) {}
+              sheetNamesShort[index + 1] = name;
             });
           } else {
             sheetNamesShort[1] = "Design 1 (T-Shirts)";
@@ -1349,7 +1603,17 @@
 
             const tdId = document.createElement('td');
             const name = sheetNamesShort[r.design_id] || `Design Sheet #${r.design_id}`;
-            tdId.innerText = name;
+            
+            let breakdownHtml = "";
+            if (r.choices_breakdown) {
+              const entries = Object.entries(r.choices_breakdown);
+              if (entries.length > 0) {
+                breakdownHtml = `<div style="font-size: 0.8rem; color: var(--text-secondary); margin-top: 0.25rem;">Detailed breakdown: ` + 
+                  entries.map(([k, v]) => `<strong>${k}</strong>: ${v}`).join(', ') + 
+                  `</div>`;
+              }
+            }
+            tdId.innerHTML = `<span><strong>${name}</strong></span>${breakdownHtml}`;
 
             const tdYesVotes = document.createElement('td');
             tdYesVotes.className = 'text-center';

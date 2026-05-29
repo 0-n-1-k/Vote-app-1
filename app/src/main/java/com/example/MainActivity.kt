@@ -99,6 +99,7 @@ fun MainScreen(
 
     // Screen State Management (0: Voter Station, 1: Admin Console)
     var selectedTab by remember { mutableStateOf(0) }
+    var voterWebView by remember { mutableStateOf<WebView?>(null) }
 
     // Auto-seed data on launch if voters table is completely empty
     LaunchedEffect(Unit) {
@@ -178,7 +179,10 @@ fun MainScreen(
                 ) {
                     Tab(
                         selected = (selectedTab == 0),
-                        onClick = { selectedTab = 0 },
+                        onClick = { 
+                            selectedTab = 0 
+                            voterWebView?.loadUrl("javascript:returnToElectionList()")
+                        },
                         text = {
                             Text(
                                 text = "VOTING STATION",
@@ -217,9 +221,13 @@ fun MainScreen(
                     .fillMaxSize()
                     .graphicsLayer {
                         alpha = if (selectedTab == 0) 1f else 0f
-                        translationX = if (selectedTab == 0) 0f else 20000f
+                        translationX = if (selectedTab == 0) 0f else 10000f
                     }
-                    .border(1.dp, SlateBorder, RoundedCornerShape(8.dp))
+                    .border(
+                        if (selectedTab == 0) 1.dp else 0.dp,
+                        if (selectedTab == 0) SlateBorder else Color.Transparent,
+                        RoundedCornerShape(8.dp)
+                    )
             ) {
                 AndroidView(
                     factory = { ctx ->
@@ -242,12 +250,15 @@ fun MainScreen(
                                     return false
                                 }
                             }
+                            voterWebView = this
                         }
                     },
                     update = { view ->
-                        if (serverReady) {
+                        if (serverReady && serverPort > 0) {
                             val targetUrl = "http://127.0.0.1:$serverPort"
-                            if (view.url != targetUrl) {
+                            val currentUrl = view.url
+                            val needsLoad = currentUrl.isNullOrEmpty() || (!currentUrl.startsWith(targetUrl) && !currentUrl.startsWith("$targetUrl/"))
+                            if (needsLoad) {
                                 view.loadUrl(targetUrl)
                             }
                         }
@@ -262,9 +273,13 @@ fun MainScreen(
                     .fillMaxSize()
                     .graphicsLayer {
                         alpha = if (selectedTab == 1) 1f else 0f
-                        translationX = if (selectedTab == 1) 0f else 20000f
+                        translationX = if (selectedTab == 1) 0f else 10000f
                     }
-                    .border(1.dp, SlateBorder, RoundedCornerShape(8.dp))
+                    .border(
+                        if (selectedTab == 1) 1.dp else 0.dp,
+                        if (selectedTab == 1) SlateBorder else Color.Transparent,
+                        RoundedCornerShape(8.dp)
+                    )
             ) {
                 AndroidView(
                     factory = { ctx ->
@@ -290,9 +305,11 @@ fun MainScreen(
                         }
                     },
                     update = { view ->
-                        if (serverReady) {
+                        if (serverReady && serverPort > 0) {
                             val targetUrl = "http://127.0.0.1:$serverPort/admin.html"
-                            if (view.url != targetUrl) {
+                            val currentUrl = view.url
+                            val needsLoad = currentUrl.isNullOrEmpty() || (!currentUrl.startsWith(targetUrl) && !currentUrl.startsWith("$targetUrl/"))
+                            if (needsLoad) {
                                 view.loadUrl(targetUrl)
                             }
                         }

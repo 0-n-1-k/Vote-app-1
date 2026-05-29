@@ -424,17 +424,6 @@ object VotingServer {
                     return@runBlocking
                 }
 
-                if (electionId == -1L) {
-                    sendResponse(exchange, 400, "{\"error\": \"Valid election selection required\"}")
-                    return@runBlocking
-                }
-
-                val election = db.electionDao().getElectionById(electionId)
-                if (election == null) {
-                    sendResponse(exchange, 404, "{\"error\": \"Selected election not found in database\"}")
-                    return@runBlocking
-                }
-
                 // 2. Deterministic Inline Garbage Sweeper
                 val currentTimeSec = System.currentTimeMillis() / 1000
                 val deletedNoncesCount = db.confirmNonceDao().deleteExpiredNonces(currentTimeSec)
@@ -444,6 +433,26 @@ object VotingServer {
 
                 // 3. Query voters
                 val voter = db.voterDao().getVoter(roll)
+                if (voter == null) {
+                    addLog("AUTH DISMISSED: Missing record card profile parameters for roll '$roll'")
+                    sendResponse(exchange, 404, "{\"error\": \"Profile not found in registry\"}")
+                    return@runBlocking
+                }
+
+                if (electionId == -1L) {
+                    val responseJson = JSONObject().apply {
+                        put("name", voter.name)
+                        put("is_management", voter.isManagement == 1)
+                    }
+                    sendResponse(exchange, 200, responseJson.toString())
+                    return@runBlocking
+                }
+
+                val election = db.electionDao().getElectionById(electionId)
+                if (election == null) {
+                    sendResponse(exchange, 404, "{\"error\": \"Selected election not found in database\"}")
+                    return@runBlocking
+                }
                 if (voter == null) {
                     addLog("AUTH DISMISSED: Missing record card profile parameters for roll '$roll'")
                     sendResponse(exchange, 404, "{\"error\": \"Profile not found in registry\"}")
@@ -559,6 +568,7 @@ object VotingServer {
                     put("name", voter.name)
                     put("roll", voter.roll)
                     put("is_management", voter.isManagement == 1)
+                    put("token", token)
                 }
                 sendResponse(exchange, 200, responseJson.toString())
             } catch (e: Exception) {
@@ -653,8 +663,8 @@ object VotingServer {
                 for (i in 0 until requiredCount) {
                     val vObj = votesArray.getJSONObject(i)
                     val designId = vObj.getInt("design_id")
-                    val choice = vObj.getString("choice")
-                    if (designId !in 1..requiredCount || (choice != "yes" && choice != "no")) {
+                    val choice = vObj.getString("choice").trim()
+                    if (designId !in 1..requiredCount || choice.isEmpty()) {
                         sendResponse(exchange, 400, "{\"error\": \"Invalid layout constraints on design choices\"}")
                         return@runBlocking
                     }
@@ -824,13 +834,30 @@ object VotingServer {
             val votes = db.voteDao().getVotesForElection(electionId)
             return customOptions.mapIndexed { index, option ->
                 val designId = index + 1
-                val yesVotes = votes.count { it.designId == designId && it.choice == "yes" }
-                val noVotes = votes.count { it.designId == designId && it.choice == "no" }
+                val optionVotes = votes.filter { it.designId == designId }
+                
+                var firstChoice = "yes"
+                var secondChoice = "no"
+                try {
+                    val parsed = org.json.JSONObject(option.optionText)
+                    val choices = parsed.optJSONArray("choices")
+                    if (choices != null && choices.length() > 0) firstChoice = choices.getString(0)
+                    if (choices != null && choices.length() > 1) secondChoice = choices.getString(1)
+                } catch (e: Exception) {}
+
+                val yesVotes = optionVotes.count { 
+                    val c = it.choice.lowercase()
+                    c == "yes" || c.startsWith("yes") || c == firstChoice.lowercase() || c == "agree" || c == "approve" || c == "approved"
+                }
+                val noVotes = optionVotes.count { 
+                    val c = it.choice.lowercase()
+                    c == "no" || c.startsWith("no") || c == secondChoice.lowercase() || c == "disagree" || c == "reject" || c == "rejected"
+                }
                 DbDesignStats(
                     design_id = designId,
                     yes_votes = yesVotes,
                     no_votes = noVotes,
-                    total_votes = yesVotes + noVotes
+                    total_votes = optionVotes.size
                 )
             }
         }
@@ -848,14 +875,35 @@ object VotingServer {
                 .firstOrNull { it.startsWith("election_id=") }
                 ?.substringAfter("election_id=")?.toLongOrNull() ?: db.electionDao().getAllElections().firstOrNull()?.id ?: -1L
 
+            val customOptions = db.votingOptionDao().getOptionsForElection(electionId)
+            val votes = db.voteDao().getVotesForElection(electionId)
             val stats = getElectionStatsProgrammatic(electionId)
             val statsArray = JSONArray().apply {
                 for (s in stats) {
+                    val option = customOptions.getOrNull(s.design_id - 1)
+                    val breakdown = JSONObject()
+                    if (option != null) {
+                        try {
+                            val parsed = org.json.JSONObject(option.optionText)
+                            val choices = parsed.optJSONArray("choices")
+                            if (choices != null) {
+                                val optionVotes = votes.filter { it.designId == s.design_id }
+                                for (i in 0 until choices.length()) {
+                                    val ch = choices.getString(i)
+                                    val count = optionVotes.count { it.choice.lowercase() == ch.lowercase() }
+                                    breakdown.put(ch, count)
+                                }
+                            }
+                        } catch (e: Exception) {}
+                    }
                     put(JSONObject().apply {
                         put("design_id", s.design_id)
                         put("yes_votes", s.yes_votes)
                         put("no_votes", s.no_votes)
                         put("total_votes", s.total_votes)
+                        if (breakdown.length() > 0) {
+                            put("choices_breakdown", breakdown)
+                        }
                     })
                 }
             }
@@ -893,6 +941,8 @@ object VotingServer {
             // Calculations panel compiled based on:
             // score = yes_votes - no_votes descending
             // handling ties with ascending design_id secondary lookup
+            val customOptions = db.votingOptionDao().getOptionsForElection(electionId)
+            val votes = db.voteDao().getVotesForElection(electionId)
             val stats = getElectionStatsProgrammatic(electionId)
 
             val ranked = stats.map { s ->
@@ -905,12 +955,31 @@ object VotingServer {
 
             val resultsArray = JSONArray().apply {
                 for (r in ranked) {
+                    val option = customOptions.getOrNull(r.designId - 1)
+                    val breakdown = JSONObject()
+                    if (option != null) {
+                        try {
+                            val parsed = org.json.JSONObject(option.optionText)
+                            val choices = parsed.optJSONArray("choices")
+                            if (choices != null) {
+                                val optionVotes = votes.filter { it.designId == r.designId }
+                                for (i in 0 until choices.length()) {
+                                    val ch = choices.getString(i)
+                                    val count = optionVotes.count { it.choice.lowercase() == ch.lowercase() }
+                                    breakdown.put(ch, count)
+                                }
+                            }
+                        } catch (e: Exception) {}
+                    }
                     put(JSONObject().apply {
                         put("design_id", r.designId)
                         put("yes_votes", r.yesVotes)
                         put("no_votes", r.noVotes)
                         put("total_votes", r.totalVotes)
                         put("score", r.score)
+                        if (breakdown.length() > 0) {
+                            put("choices_breakdown", breakdown)
+                        }
                     })
                 }
             }
